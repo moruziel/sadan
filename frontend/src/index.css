@@ -1,0 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Heebo', 'Segoe UI', Arial, sans-serif;
+  font-size: 15px;
+  direction: rtl;
+  background: #0c1117;
+  color: #f3f4f6;
+}
+
+.screen-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #c6953b;
+  background: #0c1117;
+  direction: rtl;
+}
+
+#root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #f1f1f1; }
+::-webkit-scrollbar-thumb { background: #6b7c3a; border-radius: 3px; }
+
+/* Markdown-like formatting in chat bubbles */
+.prose-rtl p { margin: 0 0 8px 0; }
+.prose-rtl p:last-child { margin-bottom: 0; }
+.prose-rtl ul { padding-right: 20px; padding-left: 0; }
+.prose-rtl li { margin-bottom: 4px; }
+.prose-rtl strong { font-weight: 700; }
+.prose-rtl h1, .prose-rtl h2, .prose-rtl h3 {
+  font-weight: 700;
+  margin: 12px 0 6px 0;
+  color: #1e2d1a;
+}
