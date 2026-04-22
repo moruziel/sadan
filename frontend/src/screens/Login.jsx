@@ -13,7 +13,7 @@ export default function Login() {
     e.preventDefault()
     if (code === VALID_CODE) {
       setLoading(true)
-      setTimeout(() => navigate('/area'), 800)
+      setTimeout(() => navigate('/field-selection'), 800)
     } else {
       setError(true)
       setTimeout(() => setError(false), 2000)
@@ -21,7 +21,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-demo-bg flex flex-col items-center justify-center" dir="rtl">
+    <div className="min-h-screen bg-demo-bg flex flex-col items-center justify-center animate-fade-in" dir="rtl">
 
       {/* Background pattern */}
       <div className="absolute inset-0 opacity-5 pointer-events-none"

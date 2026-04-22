@@ -33,6 +33,12 @@ dist/
 # Logs
 *.log
 
+# Claude worktrees
+.claude/worktrees/
+
+# Secrets
+vonage_private.key
+
 # WhatsApp auth session
 demo_assets/whatsapp_server/.wwebjs_auth/
 demo_assets/whatsapp_server/.wwebjs_cache/

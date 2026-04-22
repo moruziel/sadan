@@ -32,7 +32,7 @@ export default function Header({ currentPath, userName = 'רס"ן כהן' }) {
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/area')}>
           <div>
             <div className="text-white font-bold text-sm leading-none text-left">SADAN</div>
-            <div className="text-gray-500 text-[10px] text-left">מערכת תכנון אימונים</div>
+            <div className="text-gray-500 text-xs text-left">מערכת תכנון אימונים</div>
           </div>
           <div className="w-8 h-8 rounded-full bg-demo-gold flex items-center justify-center font-bold text-black text-sm">ס</div>
         </div>

@@ -1,8 +1,9 @@
 """
 SADAN Backend — FastAPI entry point
 """
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from backend.config import settings
@@ -22,6 +23,7 @@ from backend.agents.training_planner_agent import TrainingPlannerAgent
 from backend.agents.exercise_file_agent import ExerciseFileAgent
 from backend.agents.coordination_agent import CoordinationAgent
 from backend.agents.approval_tracker_agent import ApprovalTrackerAgent
+from backend.routers import voice as voice_router
 
 # --- אתחול האפליקציה ---
 app = FastAPI(
@@ -32,11 +34,25 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Vite dev server
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
 )
+
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+            },
+        )
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
 
 # --- אתחול ה-Orchestrator + רישום סוכנים ---
 # להוספת סוכן חדש: צור קובץ ב-agents/ וירש מ-BaseAgent → הוסף שורה כאן
@@ -50,6 +66,59 @@ orchestrator.register(ApprovalTrackerAgent())
 @app.on_event("startup")
 def on_startup():
     init_db()
+    _print_status()
+
+
+def _print_status():
+    import os
+    from backend.config import settings
+
+    print("\n" + "="*50)
+    print("  סדן — מערכת תכנון אימונים | סטטוס שירותים")
+    print("="*50)
+
+    # Claude API
+    if settings.anthropic_api_key:
+        print("  ✅ Claude AI        — פעיל")
+    else:
+        print("  ❌ Claude AI        — חסר מפתח API")
+
+    # ElevenLabs TTS
+    if settings.elevenlabs_api_key:
+        print("  ✅ סינתוז קול       — פעיל (ElevenLabs)")
+    else:
+        print("  ⚠️  סינתוז קול       — מושבת (חסר ELEVENLABS_API_KEY)")
+
+    # Whisper STT
+    cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "whisper")
+    model_file = os.path.join(cache_dir, "medium.pt")
+    if os.path.exists(model_file):
+        size_mb = round(os.path.getsize(model_file) / 1024 / 1024, 1)
+        print(f"  ✅ זיהוי דיבור      — פעיל (Whisper {size_mb}MB)")
+    else:
+        print("  ⚠️  זיהוי דיבור      — מושבת (מודל לא נמצא)")
+
+    # Vonage
+    if settings.vonage_api_key:
+        print(f"  ✅ חיוג טלפוני      — פעיל (Vonage | +{settings.vonage_from_number})")
+    else:
+        print("  ❌ חיוג טלפוני      — חסר מפתח Vonage")
+
+    # WhatsApp server
+    try:
+        import urllib.request
+        urllib.request.urlopen("http://localhost:3001/status", timeout=2)
+        print("  ✅ WhatsApp         — פעיל")
+    except Exception:
+        print("  ⚠️  WhatsApp         — לא פעיל (פורט 3001)")
+
+    print("="*50)
+    print("  >> http://localhost:5173")
+    print("="*50 + "\n")
+
+
+# ── Routers ───────────────────────────────────
+app.include_router(voice_router.router)
 
 
 # ─────────────────────────────────────────────

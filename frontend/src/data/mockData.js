@@ -232,6 +232,115 @@ export const AREA_309 = {
         },
         geometry: { type: 'Point', coordinates: [35.232, 31.818] },
       },
+
+      // ══ ציר התקדמות — איגוף מדרום ══════════════════════════
+      {
+        type: 'Feature',
+        properties: {
+          category: 'axis',
+          label: 'ציר התקדמות',
+          popup_title: '→ ציר כוחות — איגוף מדרום',
+          popup_body: 'מתווה: איגוף מדרום\nכיוון: דרום → מערב → צפון-מזרח\nגל א׳: סיור H | גל ב׳: כיבוש H+2\nכוח: פלוגה ב׳ גדוד 51',
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [35.237, 31.797],
+            [35.218, 31.803],
+            [35.215, 31.820],
+            [35.228, 31.837],
+            [35.240, 31.842],
+          ],
+        },
+      },
+
+      // ══ כוחות ידידותיים ═══════════════════════════════════
+      {
+        type: 'Feature',
+        properties: {
+          category: 'friendly_start',
+          label: 'חפ"ק גדוד 51',
+          icon: '★',
+          popup_title: '★ חפ"ק גדוד 51',
+          popup_body: 'מפקד: רס"ן א. לוי\nתדר: 46.500 MHz\nשלב: H-4 — כינוס ותדריך\nמיקום: נקודת כינוס דרומית',
+        },
+        geometry: { type: 'Point', coordinates: [35.237, 31.797] },
+      },
+      {
+        type: 'Feature',
+        properties: {
+          category: 'friendly_start',
+          label: 'תחנה רפואית',
+          icon: '✚',
+          popup_title: '✚ תחנה רפואית',
+          popup_body: 'אחראי: חובש גדוד\nרכב: אמבולנס — נ.צ. מאושר\nקיבולת: 8 נפגעים\nציוד: עגלת חירום + MARCHPAWS',
+        },
+        geometry: { type: 'Point', coordinates: [35.232, 31.795] },
+      },
+
+      // ══ מטרות ══════════════════════════════════════════════
+      {
+        type: 'Feature',
+        properties: {
+          category: 'objective',
+          label: 'יעד א׳',
+          popup_title: '⊕ יעד א׳ — בטונדה מערבית',
+          popup_body: 'סוג: בטונדה מחוזקת\nסדר כיבוש: ראשון\nשלב: H+2\nכוח מבצע: מחלקה א׳',
+        },
+        geometry: { type: 'Point', coordinates: [35.228, 31.837] },
+      },
+      {
+        type: 'Feature',
+        properties: {
+          category: 'objective',
+          label: 'יעד ב׳',
+          popup_title: '⊕ יעד ב׳ — בטונדה מרכזית',
+          popup_body: 'סוג: בטונדה מחוזקת\nסדר כיבוש: שני (עיקרי)\nשלב: H+3\nכוח מבצע: מחלקה ב׳',
+        },
+        geometry: { type: 'Point', coordinates: [35.240, 31.842] },
+      },
+      {
+        type: 'Feature',
+        properties: {
+          category: 'objective',
+          label: 'יעד ג׳',
+          popup_title: '⊕ יעד ג׳ — עמדה מזרחית',
+          popup_body: 'סוג: עמדה מחוזקת\nסדר כיבוש: שלישי\nשלב: H+4\nכוח מבצע: מחלקה ג׳',
+        },
+        geometry: { type: 'Point', coordinates: [35.252, 31.836] },
+      },
+
+      // ══ עמדות אויב (בימוי) ════════════════════════════════
+      {
+        type: 'Feature',
+        properties: {
+          category: 'enemy',
+          label: 'מוצב אויב מרכז',
+          popup_title: '✕ מוצב אויב — מרכז (בימוי)',
+          popup_body: 'סוג: עמדה מחוזקת\nחוזק: מחלקה — 12 כ"א\nנשק: M16 + מקלע\nמרחק גילוי: ~400מ׳',
+        },
+        geometry: { type: 'Point', coordinates: [35.236, 31.831] },
+      },
+      {
+        type: 'Feature',
+        properties: {
+          category: 'enemy',
+          label: 'עמדת אויב מזרח',
+          popup_title: '✕ עמדת אויב — מזרח (בימוי)',
+          popup_body: 'סוג: עמדה קלה\nחוזק: כיתה — 6 כ"א\nנשק: M16\nמרחק גילוי: ~250מ׳',
+        },
+        geometry: { type: 'Point', coordinates: [35.250, 31.828] },
+      },
+      {
+        type: 'Feature',
+        properties: {
+          category: 'enemy',
+          label: 'נ.ק. אויב',
+          popup_title: '✕ נ.ק. אויב — נקודת קבוצה (בימוי)',
+          popup_body: 'סוג: נקודת קבוצה\nחוזק: מחלקה — 10 כ"א\nנשק: M16 + RPG\nהערה: ממוקם בנקודת גובה',
+        },
+        geometry: { type: 'Point', coordinates: [35.244, 31.839] },
+      },
     ],
   },
 }

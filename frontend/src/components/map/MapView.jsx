@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { AREA_309 } from '../../data/mockData'
+import { addFiringCones, removeFiringCones, setFiringConesVisibility } from './FiringConesLayer.js'
 
 const INITIAL_CENTER = [35.245, 31.82]
 const INITIAL_ZOOM   = 12
@@ -41,6 +42,7 @@ const CLICKABLE_LAYERS = [
   'hazard-zone-fill',
   'neighbor-zone-fill',
   'powerline',
+  'axis-line',
 ]
 
 const SEVERITY_BORDER = { high: '#ef4444', medium: '#f59e0b', low: '#9ca3af', undefined: '#9ca3af' }
@@ -55,21 +57,26 @@ function polygonCentroid(coordinates) {
   return [x / n, y / n]
 }
 
-export default function MapView({ layers }) {
+export default function MapView({ layers, activePlanId = null }) {
   const containerRef  = useRef(null)
   const mapObj        = useRef(null)
   const popupRef      = useRef(null)
   const markersRef    = useRef({}) // { category: [marker, ...] }
-  const [is3D, setIs3D] = useState(false)
+  const [is3D, setIs3D]           = useState(false)
+  const [showCones, setShowCones] = useState(false)
 
   useEffect(() => {
     if (!containerRef.current || mapObj.current) return
 
     const map = new maplibregl.Map({
-      container: containerRef.current,
-      style:     MAP_STYLE,
-      center:    INITIAL_CENTER,
-      zoom:      INITIAL_ZOOM,
+      container:        containerRef.current,
+      style:            MAP_STYLE,
+      center:           INITIAL_CENTER,
+      zoom:             INITIAL_ZOOM,
+      dragRotate:       true,
+      pitchWithRotate:  true,
+      touchZoomRotate:  true,
+      maxPitch:         85,
     })
 
     map.addControl(new maplibregl.NavigationControl(), 'top-left')
@@ -177,9 +184,150 @@ export default function MapView({ layers }) {
         paint: { 'line-color': '#a855f7', 'line-width': 2.5 },
       })
 
+      // ── ציר התקדמות ───────────────────────────────────────
+      map.addLayer({
+        id: 'axis-line',
+        type: 'line',
+        source: 'area-309',
+        filter: ['==', ['get', 'category'], 'axis'],
+        layout: { visibility: 'visible' },
+        paint: {
+          'line-color': '#c6953b',
+          'line-width': 3.5,
+          'line-dasharray': [5, 3],
+          'line-opacity': 0.95,
+        },
+      })
+
       // ── HTML Markers — emoji אמיתיים ─────────────────────
       const markersByCat = {}
       const addMarkers = []
+
+      // ── חיצי כיוון לאורך הציר ────────────────────────────
+      AREA_309.geojson.features.forEach(feat => {
+        if (feat.properties.category !== 'axis') return
+        if (feat.geometry.type !== 'LineString') return
+        const coords = feat.geometry.coordinates
+        for (let i = 1; i < coords.length; i++) {
+          const from = coords[i - 1]
+          const to   = coords[i]
+          const dLng = to[0] - from[0]
+          const dLat = to[1] - from[1]
+          const angle = Math.atan2(dLng, dLat) * 180 / Math.PI
+          const el = document.createElement('div')
+          el.style.cssText = [
+            'width:0', 'height:0',
+            'border-left:6px solid transparent',
+            'border-right:6px solid transparent',
+            'border-bottom:13px solid #c6953b',
+            `transform:rotate(${angle}deg)`,
+            'filter:drop-shadow(0 1px 4px rgba(0,0,0,0.9))',
+            'pointer-events:none',
+          ].join(';')
+          const m = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(to)
+          if (!markersByCat['axis']) markersByCat['axis'] = []
+          markersByCat['axis'].push(m)
+          addMarkers.push({ marker: m, category: 'axis' })
+        }
+      })
+
+      // ── מטרות, אויב, כוחות ידידותיים ────────────────────
+      AREA_309.geojson.features.forEach(feat => {
+        const p   = feat.properties
+        const cat = p.category
+        if (!['objective', 'enemy', 'friendly_start'].includes(cat)) return
+        if (feat.geometry.type !== 'Point') return
+
+        const lngLat = feat.geometry.coordinates
+        const el = document.createElement('div')
+
+        if (cat === 'objective') {
+          el.style.cssText = [
+            'width:36px', 'height:36px',
+            'display:flex', 'align-items:center', 'justify-content:center',
+            'border:2.5px solid #f59e0b',
+            'border-radius:50%',
+            'background:rgba(245,158,11,0.18)',
+            'color:#f59e0b',
+            'font-size:15px',
+            'font-weight:900',
+            'box-shadow:0 0 14px rgba(245,158,11,0.55)',
+            'cursor:pointer',
+            'animation:objPulse 2s ease-in-out infinite',
+            'position:relative',
+            'z-index:1',
+            'overflow:visible',
+          ].join(';')
+          el.textContent = '⊕'
+          el.title = p.label || ''
+          // תווית קטנה מתחת
+          const lbl = document.createElement('div')
+          lbl.style.cssText = [
+            'position:absolute',
+            'bottom:-18px',
+            'left:50%',
+            'transform:translateX(-50%)',
+            'color:#f59e0b',
+            'font-size:10px',
+            'font-weight:700',
+            'white-space:nowrap',
+            'text-shadow:0 1px 3px #000,0 0 6px #000',
+            'pointer-events:none',
+          ].join(';')
+          lbl.textContent = p.label
+          el.style.position = 'relative'
+          el.appendChild(lbl)
+
+        } else if (cat === 'enemy') {
+          el.style.cssText = [
+            'width:32px', 'height:32px',
+            'display:flex', 'align-items:center', 'justify-content:center',
+            'border:2.5px solid #ef4444',
+            'border-radius:4px',
+            'background:rgba(239,68,68,0.2)',
+            'color:#ef4444',
+            'font-size:16px',
+            'font-weight:900',
+            'box-shadow:0 0 12px rgba(239,68,68,0.5)',
+            'cursor:pointer',
+            'position:relative',
+            'z-index:1',
+          ].join(';')
+          el.textContent = '✕'
+          el.title = p.label || ''
+
+        } else if (cat === 'friendly_start') {
+          const isHQ = p.icon === '★'
+          el.style.cssText = [
+            'width:34px', 'height:34px',
+            'display:flex', 'align-items:center', 'justify-content:center',
+            `border:2.5px solid ${isHQ ? '#3b82f6' : '#ffffff'}`,
+            'border-radius:4px',
+            `background:${isHQ ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.15)'}`,
+            `color:${isHQ ? '#3b82f6' : '#ffffff'}`,
+            'font-size:16px',
+            'font-weight:700',
+            'box-shadow:0 0 10px rgba(59,130,246,0.4)',
+            'cursor:pointer',
+            'position:relative',
+            'z-index:1',
+          ].join(';')
+          el.textContent = p.icon || '★'
+          el.title = p.label || ''
+        }
+
+        el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.2)'; el.style.zIndex = '200' })
+        el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)';   el.style.zIndex = '1'   })
+        el.addEventListener('click', e => {
+          e.stopPropagation()
+          popup.setLngLat(lngLat).setHTML(buildPopupHTML(p)).addTo(map)
+        })
+
+        const m = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(lngLat)
+        if (!markersByCat[cat]) markersByCat[cat] = []
+        markersByCat[cat].push(m)
+        addMarkers.push({ marker: m, category: cat })
+      })
 
       AREA_309.geojson.features.forEach(feat => {
         const p = feat.properties
@@ -216,9 +364,9 @@ export default function MapView({ layers }) {
         el.textContent = p.icon
         el.title = p.label || ''
 
-        // hover
-        el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.25)' })
-        el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)' })
+        // hover + z-index elevation (מניעת היעלמות מאחורי שכבות)
+        el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.25)'; el.style.zIndex = '200' })
+        el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)';   el.style.zIndex = '1'   })
 
         // popup בקליק
         el.addEventListener('click', e => {
@@ -236,16 +384,21 @@ export default function MapView({ layers }) {
 
       // הוסף markers לפי הגדרת שכבות
       const catToLayer = {
-        hazard:         'hazards',
-        hazard_zone:    'hazards',
-        infrastructure: 'infrastructure',
-        history:        'history',
-        neighbor:       'neighbors',
-        neighbor_zone:  'neighbors',
+        hazard:          'hazards',
+        hazard_zone:     'hazards',
+        infrastructure:  'infrastructure',
+        history:         'history',
+        neighbor:        'neighbors',
+        neighbor_zone:   'neighbors',
+        axis:            'forces',
+        objective:       'forces',
+        enemy:           'forces',
+        friendly_start:  'forces',
       }
       addMarkers.forEach(({ marker, category }) => {
         const layerKey = catToLayer[category]
         if (layerKey && layers[layerKey]) marker.addTo(map)
+        else if (!layerKey) marker.addTo(map) // ברירת מחדל — תמיד מוצג
       })
 
       markersRef.current = markersByCat
@@ -307,6 +460,7 @@ export default function MapView({ layers }) {
     ].forEach(id => set(id, layers.hazards))
     ;['neighbor-zone-fill','neighbor-zone-border',
     ].forEach(id => set(id, layers.neighbors))
+    ;['axis-line'].forEach(id => set(id, layers.forces))
 
     // HTML Markers — הצג/הסתר
     const m = markersRef.current
@@ -317,11 +471,27 @@ export default function MapView({ layers }) {
       }))
     }
 
-    toggleMarkers(['hazard', 'hazard_zone'], layers.hazards)
-    toggleMarkers(['infrastructure'],         layers.infrastructure)
-    toggleMarkers(['history'],                layers.history)
-    toggleMarkers(['neighbor', 'neighbor_zone'], layers.neighbors)
-  }, [layers.hazards, layers.infrastructure, layers.neighbors, layers.history])
+    toggleMarkers(['hazard', 'hazard_zone'],        layers.hazards)
+    toggleMarkers(['infrastructure'],               layers.infrastructure)
+    toggleMarkers(['history'],                      layers.history)
+    toggleMarkers(['neighbor', 'neighbor_zone'],    layers.neighbors)
+    toggleMarkers(['axis', 'objective', 'enemy', 'friendly_start'], layers.forces)
+  }, [layers.hazards, layers.infrastructure, layers.neighbors, layers.history, layers.forces])
+
+  // ── Firing cones — toggle + plan change ─────────────────
+  useEffect(() => {
+    const map = mapObj.current
+    if (!map || !map.isStyleLoaded()) return
+    if (showCones && activePlanId) {
+      addFiringCones(map, activePlanId, popupRef.current)
+    } else {
+      removeFiringCones(map)
+    }
+  }, [showCones, activePlanId])
+
+  function toggleCones() {
+    setShowCones(v => !v)
+  }
 
   // ── 3D toggle ────────────────────────────────────────────
   function toggle3D() {
@@ -342,17 +512,31 @@ export default function MapView({ layers }) {
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 0 }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 
-      {/* כפתור 3D */}
-      <button
-        onClick={toggle3D}
-        style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}
-        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg
-          ${is3D
-            ? 'bg-demo-gold text-black'
-            : 'bg-demo-surface/90 text-demo-gold border border-demo-gold/40 backdrop-blur-sm'}`}
-      >
-        ⛰️ {is3D ? '2D' : '3D'}
-      </button>
+      {/* כפתורי מפה — ימין */}
+      <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }} className="flex flex-col gap-2">
+        <button
+          onClick={toggle3D}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg
+            ${is3D
+              ? 'bg-demo-gold text-black'
+              : 'bg-demo-surface/90 text-demo-gold border border-demo-gold/40 backdrop-blur-sm'}`}
+        >
+          ⛰️ {is3D ? '2D' : '3D'}
+        </button>
+
+        {activePlanId && (
+          <button
+            onClick={toggleCones}
+            title="הצג / הסתר משפכי ירי"
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg
+              ${showCones
+                ? 'bg-red-600 text-white'
+                : 'bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm'}`}
+          >
+            🔫 {showCones ? 'הסתר ירי' : 'משפכי ירי'}
+          </button>
+        )}
+      </div>
 
       {/* Legend */}
       <div
@@ -361,6 +545,11 @@ export default function MapView({ layers }) {
         dir="rtl"
       >
         <div className="text-gray-500 font-semibold text-[10px] uppercase tracking-wide mb-1">מקרא</div>
+        <div className="flex items-center gap-2"><span className="w-5 h-0 border-t-2 border-dashed border-[#c6953b] inline-block"/><span className="text-[#c6953b] font-semibold">ציר כוחות</span></div>
+        <div className="flex items-center gap-2"><span className="text-[#f59e0b] font-black text-base">⊕</span><span className="text-gray-300">מטרה</span></div>
+        <div className="flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center border border-[#ef4444] rounded-sm text-[#ef4444] text-[10px] font-black inline-block">✕</span><span className="text-gray-300">בימוי אויב</span></div>
+        <div className="flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center border border-[#3b82f6] rounded-sm text-[#3b82f6] text-[10px] font-black inline-block">★</span><span className="text-gray-300">חפ"ק / רפואה</span></div>
+        <div className="border-t border-gray-700 my-0.5"/>
         <div className="flex items-center gap-2"><span className="text-sm">🏺🌿</span><span className="text-gray-300">מפגע</span><span className="w-2.5 h-2.5 rounded-full border-2 border-[#ef4444] inline-block ml-1"/><span className="text-[#ef4444]">גבוה</span></div>
         <div className="flex items-center gap-2 pr-5"><span className="w-2.5 h-2.5 rounded-full border-2 border-[#f59e0b] inline-block"/><span className="text-[#f59e0b]">בינוני</span></div>
         <div className="flex items-center gap-2"><span className="text-sm">🏕️💧🚁🏢</span><span className="text-gray-300">תשתית</span></div>
@@ -371,6 +560,10 @@ export default function MapView({ layers }) {
 
       {/* Popup CSS */}
       <style>{`
+        @keyframes objPulse {
+          0%, 100% { box-shadow: 0 0 10px rgba(245,158,11,0.4); }
+          50%       { box-shadow: 0 0 26px rgba(245,158,11,0.9); }
+        }
         .sadan-popup .maplibregl-popup-content {
           background: #111827;
           border: 1px solid rgba(198,149,59,0.3);

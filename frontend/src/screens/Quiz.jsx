@@ -138,7 +138,7 @@ function QuestionCard({ q, answers, submitted, onSelect }) {
             </button>
           )
         })}
-        <p className="text-gray-600 text-[10px] pt-1">מקור: {q.source}</p>
+        <p className="text-gray-600 text-[11px] pt-1">מקור: {q.source}</p>
       </div>
     </div>
   )

@@ -21,6 +21,28 @@ export default {
           info:     '#3b82f6',
         },
       },
+      animation: {
+        'fade-up':   'fadeUp 0.3s ease-out both',
+        'fade-in':   'fadeIn 0.25s ease-out both',
+        'slide-in':  'slideIn 0.3s ease-out both',
+        'stagger-1': 'fadeUp 0.3s 0.05s ease-out both',
+        'stagger-2': 'fadeUp 0.3s 0.10s ease-out both',
+        'stagger-3': 'fadeUp 0.3s 0.15s ease-out both',
+      },
+      keyframes: {
+        fadeUp: {
+          '0%':   { opacity: '0', transform: 'translateY(12px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        fadeIn: {
+          '0%':   { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        slideIn: {
+          '0%':   { opacity: '0', transform: 'translateX(16px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
+        },
+      },
     },
   },
   plugins: [],
