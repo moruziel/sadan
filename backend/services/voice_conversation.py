@@ -99,7 +99,6 @@ class VoiceConversationSession:
         dg = DeepgramClient(settings.deepgram_api_key)
         self._dg_connection = dg.listen.asynclive.v("1")
 
-        @self._dg_connection.on(LiveTranscriptionEvents.Transcript)
         async def on_transcript(self_dg, result, **kwargs):
             try:
                 alt = result.channel.alternatives[0]
@@ -110,10 +109,20 @@ class VoiceConversationSession:
             except Exception as e:
                 logger.error(f"Transcript handler error: {e}")
 
+        async def on_error(self_dg, error, **kwargs):
+            logger.error(f"[Deepgram] Error: {error}")
+
+        async def on_close(self_dg, close, **kwargs):
+            logger.info(f"[Deepgram] Connection closed: {close}")
+
+        self._dg_connection.on(LiveTranscriptionEvents.Transcript, on_transcript)
+        self._dg_connection.on(LiveTranscriptionEvents.Error, on_error)
+        self._dg_connection.on(LiveTranscriptionEvents.Close, on_close)
+
         from deepgram import LiveOptions
         options = LiveOptions(
             model="nova-2",
-            language="he",
+            language="multi",   # "he" returns HTTP 400 — "multi" supports Hebrew
             encoding="linear16",
             sample_rate=16000,
             punctuate=True,
@@ -123,7 +132,9 @@ class VoiceConversationSession:
 
         started = await self._dg_connection.start(options)
         if not started:
-            raise RuntimeError("Deepgram connection failed to start")
+            logger.error("Deepgram failed to start — will continue without STT")
+            self._dg_connection = None
+            return
         logger.info("Deepgram streaming STT started (he, nova-2)")
 
     async def _forward_audio_loop(self):
@@ -177,6 +188,8 @@ class VoiceConversationSession:
     async def _speak(self, text: str):
         """
         Generate speech with ElevenLabs (pcm_16000) and stream to Vonage.
+        Sends audio in fixed 640-byte chunks (20ms at 16kHz 16-bit mono)
+        to prevent choppy playback.
         Blocks incoming audio while speaking.
         """
         from backend.config import settings
@@ -187,6 +200,8 @@ class VoiceConversationSession:
 
         self._is_speaking = True
         logger.info(f"[TTS] Speaking: {text[:60]}")
+
+        CHUNK_SIZE = 640  # 20ms at 16kHz, 16-bit mono = 640 bytes
 
         try:
             from elevenlabs.client import ElevenLabs
@@ -199,11 +214,22 @@ class VoiceConversationSession:
                 output_format="pcm_16000",  # raw LINEAR16 16kHz — matches Vonage
             )
 
-            # Stream chunks directly to Vonage WebSocket
+            # Buffer and send in fixed 20ms chunks
+            buffer = bytearray()
             for chunk in audio_stream:
                 if chunk:
-                    await self.websocket.send_bytes(chunk)
-                    await asyncio.sleep(0)  # yield to event loop
+                    buffer.extend(chunk)
+                    while len(buffer) >= CHUNK_SIZE:
+                        await self.websocket.send_bytes(bytes(buffer[:CHUNK_SIZE]))
+                        buffer = buffer[CHUNK_SIZE:]
+                        await asyncio.sleep(0.001)  # ~1ms yield between chunks
+
+            # Flush remaining audio
+            if buffer:
+                await self.websocket.send_bytes(bytes(buffer))
+
+            # Small pause after speaking so Vonage processes end of audio
+            await asyncio.sleep(0.3)
 
         except Exception as e:
             logger.error(f"ElevenLabs TTS error: {e}")
