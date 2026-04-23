@@ -189,11 +189,21 @@ class GeminiVonagePipeline:
       Vonage (24 kHz) → resample → Gemini (16 kHz in / 24 kHz out) → Vonage (24 kHz)
     """
 
-    def __init__(self, websocket, script_id: str, opening: str, system_prompt: str):
+    def __init__(
+        self,
+        websocket,
+        script_id: str,
+        opening: str,
+        system_prompt: str,
+        whatsapp_message: str = "",
+        whatsapp_to: str = "",
+    ):
         self.websocket = websocket
         self.script_id = script_id
         self.opening = opening
         self.system_prompt = system_prompt
+        self.whatsapp_message = whatsapp_message
+        self.whatsapp_to = whatsapp_to
 
     async def run(self):
         try:
@@ -211,6 +221,25 @@ class GeminiVonagePipeline:
             f"{self.system_prompt}"
         )
 
+        # send_whatsapp tool — Gemini calls this when it decides to resend exercise details
+        tools = []
+        if self.whatsapp_message:
+            tools = [types.Tool(
+                function_declarations=[
+                    types.FunctionDeclaration(
+                        name="send_whatsapp",
+                        description=(
+                            "שלח הודעת וואטסאפ עם פרטי התרגיל לאיש הקשר. "
+                            "הפעל כלי זה כשהמשתמש אומר שלא קיבל את ההודעה."
+                        ),
+                        parameters=types.Schema(
+                            type=types.Type.OBJECT,
+                            properties={},
+                        ),
+                    )
+                ]
+            )]
+
         config = types.LiveConnectConfig(
             response_modalities=[types.Modality.AUDIO],
             system_instruction=types.Content(
@@ -223,6 +252,7 @@ class GeminiVonagePipeline:
                     )
                 )
             ),
+            tools=tools if tools else None,
         )
 
         logger.info(f"[Gemini Vonage] Connecting — script={self.script_id}")
@@ -282,10 +312,28 @@ class GeminiVonagePipeline:
             logger.warning(f"[Gemini Vonage] Send error: {e}")
 
     async def _receive_audio(self, session):
-        """Gemini (24 kHz) → Vonage in 20 ms chunks."""
+        """Gemini (24 kHz) → Vonage in 20 ms chunks.
+        Also handles the send_whatsapp tool call."""
+        from google.genai import types
         try:
             while True:
                 async for response in session.receive():
+
+                    # ── Tool call: send_whatsapp ───────────────
+                    if response.tool_call:
+                        for fc in response.tool_call.function_calls:
+                            if fc.name == "send_whatsapp":
+                                await self._do_send_whatsapp()
+                                await session.send_tool_response(
+                                    function_responses=[
+                                        types.FunctionResponse(
+                                            name="send_whatsapp",
+                                            id=fc.id,
+                                            response={"result": "sent"},
+                                        )
+                                    ]
+                                )
+
                     if not response.server_content:
                         continue
                     sc = response.server_content
@@ -312,3 +360,20 @@ class GeminiVonagePipeline:
 
         except Exception as e:
             logger.warning(f"[Gemini Vonage] Receive error: {e}")
+
+    async def _do_send_whatsapp(self):
+        """Send exercise details via WhatsApp server (localhost:3001/send)."""
+        if not self.whatsapp_message or not self.whatsapp_to:
+            logger.warning("[Gemini Vonage] send_whatsapp called but no message/phone configured")
+            return
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=8) as client:
+                resp = await client.post(
+                    "http://localhost:3001/send",
+                    json={"phone": self.whatsapp_to, "message": self.whatsapp_message},
+                )
+                data = resp.json()
+                logger.info(f"[Gemini Vonage] WhatsApp sent → {data}")
+        except Exception as e:
+            logger.warning(f"[Gemini Vonage] WhatsApp send failed (non-fatal): {e}")
