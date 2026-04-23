@@ -12,6 +12,7 @@ Audio specs:
 """
 
 import asyncio
+import json
 import logging
 
 import numpy as np
@@ -63,6 +64,29 @@ class GeminiLivePipeline:
 
         client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION)
 
+        # send_whatsapp tool — SADAN can send a WhatsApp message to the user
+        send_wa_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="send_whatsapp",
+                    description=(
+                        "שלח הודעת וואטסאפ למשתמש. "
+                        "הפעל כשהמשתמש מבקש לשלוח מידע, קואורדינטות, קישור או סיכום בוואטסאפ."
+                    ),
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "message": types.Schema(
+                                type=types.Type.STRING,
+                                description="תוכן ההודעה לשליחה בוואטסאפ",
+                            ),
+                        },
+                        required=["message"],
+                    ),
+                )
+            ]
+        )
+
         config = types.LiveConnectConfig(
             response_modalities=[types.Modality.AUDIO],
             system_instruction=types.Content(
@@ -76,6 +100,10 @@ class GeminiLivePipeline:
                     )
                 )
             ),
+            # Transcription for both sides — sent as JSON to the browser
+            output_audio_transcription=types.AudioTranscriptionConfig(),
+            input_audio_transcription=types.AudioTranscriptionConfig(),
+            tools=[send_wa_tool],
         )
 
         logger.info(f"[Gemini Live] Connecting — model={MODEL}")
@@ -126,12 +154,28 @@ class GeminiLivePipeline:
             logger.warning(f"[Gemini Live] Send error: {e}")
 
     async def _receive_audio(self, session):
-        """Gemini → FastAPI → Browser: forward 24 kHz PCM audio chunks."""
+        """Gemini → FastAPI → Browser: forward 24 kHz PCM + transcripts as JSON."""
+        from google.genai import types
         try:
             while True:
-                # session.receive() yields one turn's worth of events;
-                # the outer while-True re-enters for the next turn.
                 async for response in session.receive():
+
+                    # ── Tool call: send_whatsapp ───────────────
+                    if response.tool_call:
+                        for fc in response.tool_call.function_calls:
+                            if fc.name == "send_whatsapp":
+                                message = (fc.args or {}).get("message", "")
+                                await self._do_send_whatsapp(message)
+                                await session.send_tool_response(
+                                    function_responses=[
+                                        types.FunctionResponse(
+                                            name="send_whatsapp",
+                                            id=fc.id,
+                                            response={"result": "sent"},
+                                        )
+                                    ]
+                                )
+
                     if not response.server_content:
                         continue
                     sc = response.server_content
@@ -144,9 +188,26 @@ class GeminiLivePipeline:
                                     bytes(part.inline_data.data)
                                 )
 
+                    # SADAN transcript (model output)
+                    if sc.output_transcription and sc.output_transcription.text:
+                        await self.websocket.send_text(json.dumps({
+                            "type": "transcript",
+                            "role": "assistant",
+                            "text": sc.output_transcription.text,
+                            "final": bool(sc.turn_complete),
+                        }, ensure_ascii=False))
+
+                    # User transcript (input)
+                    if sc.input_transcription and sc.input_transcription.text:
+                        await self.websocket.send_text(json.dumps({
+                            "type": "transcript",
+                            "role": "user",
+                            "text": sc.input_transcription.text,
+                            "final": True,
+                        }, ensure_ascii=False))
+
                     if sc.interrupted:
                         logger.info("[Gemini Live] ↩ User interrupted — barge-in")
-                        # Notify browser to flush its audio queue
                         await self.websocket.send_text('{"type":"interrupted"}')
 
                     if sc.turn_complete:
@@ -154,6 +215,28 @@ class GeminiLivePipeline:
 
         except Exception as e:
             logger.warning(f"[Gemini Live] Receive error: {e}")
+
+    async def _do_send_whatsapp(self, message: str):
+        """Send a WhatsApp message via the local WhatsApp server (localhost:3001/send)."""
+        if not message:
+            logger.warning("[Gemini Live] send_whatsapp called with empty message")
+            return
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=8) as client:
+                resp = await client.post(
+                    "http://localhost:3001/send",
+                    json={"message": message},
+                )
+                data = resp.json()
+                logger.info(f"[Gemini Live] WhatsApp sent → {data}")
+                # Notify the browser so it can show a confirmation bubble
+                await self.websocket.send_text(json.dumps({
+                    "type": "whatsapp_sent",
+                    "message": message,
+                }, ensure_ascii=False))
+        except Exception as e:
+            logger.warning(f"[Gemini Live] WhatsApp send failed (non-fatal): {e}")
 
 
 # ── Audio resampling ───────────────────────────────────────────────────────────
