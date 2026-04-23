@@ -1,6 +1,18 @@
 """
 SADAN Backend — FastAPI entry point
 """
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+# suppress noisy third-party loggers
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("deepgram").setLevel(logging.WARNING)
+
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -24,6 +36,7 @@ from backend.agents.exercise_file_agent import ExerciseFileAgent
 from backend.agents.coordination_agent import CoordinationAgent
 from backend.agents.approval_tracker_agent import ApprovalTrackerAgent
 from backend.routers import voice as voice_router
+from backend.routers import gemini_voice as gemini_voice_router
 
 # --- אתחול האפליקציה ---
 app = FastAPI(
@@ -66,59 +79,77 @@ orchestrator.register(ApprovalTrackerAgent())
 @app.on_event("startup")
 def on_startup():
     init_db()
+    _warm_up_clients()
     _print_status()
+
+
+def _warm_up_clients():
+    """Pre-initialize singletons so first call has no cold-start delay."""
+    try:
+        from backend.services.voice_pipeline_v2 import VoicePipelineV2
+        VoicePipelineV2._get_tts_client()
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"TTS warm-up failed: {e}")
 
 
 def _print_status():
     import os
     from backend.config import settings
 
-    print("\n" + "="*50)
-    print("  סדן — מערכת תכנון אימונים | סטטוס שירותים")
-    print("="*50)
+    W = 54
+    print("\n" + "=" * W)
+    print("  SADAN — Service Status")
+    print("=" * W)
 
     # Claude API
     if settings.anthropic_api_key:
-        print("  ✅ Claude AI        — פעיל")
+        print("  [OK] Claude AI          — active (claude-sonnet-4-6)")
     else:
-        print("  ❌ Claude AI        — חסר מפתח API")
+        print("  [!!] Claude AI          — missing ANTHROPIC_API_KEY")
 
-    # ElevenLabs TTS
-    if settings.elevenlabs_api_key:
-        print("  ✅ סינתוז קול       — פעיל (ElevenLabs)")
-    else:
-        print("  ⚠️  סינתוז קול       — מושבת (חסר ELEVENLABS_API_KEY)")
+    # Google TTS
+    try:
+        import google.cloud.texttospeech
+        print("  [OK] Google TTS         — active (he-IL-Chirp3-HD-Charon)")
+    except ImportError:
+        print("  [!!] Google TTS         — missing google-cloud-texttospeech")
 
-    # Whisper STT
-    cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "whisper")
-    model_file = os.path.join(cache_dir, "medium.pt")
-    if os.path.exists(model_file):
-        size_mb = round(os.path.getsize(model_file) / 1024 / 1024, 1)
-        print(f"  ✅ זיהוי דיבור      — פעיל (Whisper {size_mb}MB)")
-    else:
-        print("  ⚠️  זיהוי דיבור      — מושבת (מודל לא נמצא)")
+    # Google STT V2
+    try:
+        import google.cloud.speech_v2
+        print("  [OK] Google STT V2      — active (chirp_2 / he-IL / us-central1)")
+    except ImportError:
+        print("  [!!] Google STT V2      — missing google-cloud-speech")
 
     # Vonage
-    if settings.vonage_api_key:
-        print(f"  ✅ חיוג טלפוני      — פעיל (Vonage | +{settings.vonage_from_number})")
+    if settings.vonage_api_key and settings.vonage_app_id:
+        print(f"  [OK] Vonage Voice       — active (+{settings.vonage_from_number})")
     else:
-        print("  ❌ חיוג טלפוני      — חסר מפתח Vonage")
+        print("  [--] Vonage Voice       — disabled (missing keys)")
+
+    # Cloudflare tunnel / ngrok
+    if settings.ngrok_host:
+        print(f"  [OK] Tunnel             — {settings.ngrok_host}")
+    else:
+        print("  [--] Tunnel             — not set (NGROK_HOST empty, calls use TTS fallback)")
 
     # WhatsApp server
     try:
         import urllib.request
         urllib.request.urlopen("http://localhost:3001/status", timeout=2)
-        print("  ✅ WhatsApp         — פעיל")
+        print("  [OK] WhatsApp server    — active (port 3001)")
     except Exception:
-        print("  ⚠️  WhatsApp         — לא פעיל (פורט 3001)")
+        print("  [--] WhatsApp server    — not running (port 3001)")
 
-    print("="*50)
-    print("  >> http://localhost:5173")
-    print("="*50 + "\n")
+    print("=" * W)
+    print("  Frontend : http://localhost:5173")
+    print("  API docs : http://localhost:8000/docs")
+    print("=" * W + "\n")
 
 
 # ── Routers ───────────────────────────────────
 app.include_router(voice_router.router)
+app.include_router(gemini_voice_router.router)
 
 
 # ─────────────────────────────────────────────

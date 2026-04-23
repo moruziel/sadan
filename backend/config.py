@@ -12,7 +12,10 @@ class Settings(BaseSettings):
     # ElevenLabs TTS
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = "nPczCjzI2devNBz1zQrb"  # Brian
-    elevenlabs_model: str = "eleven_v3"
+    elevenlabs_model: str = "eleven_v3"  # turbo/flash break pcm_16000 output — v3 is stable
+
+    # Claude model for voice calls — use same as main model (haiku 404'd on this key)
+    claude_voice_model: str = "claude-sonnet-4-6"
 
     # Deepgram STT
     deepgram_api_key: str = ""

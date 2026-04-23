@@ -212,13 +212,57 @@ async def voice_health():
 
 
 # ── Approval scripts ────────────────────────────────────────
-APPROVAL_SCRIPTS: dict[str, str] = {
-    "rtg":      "שלום, כאן מערכת סדן מגדוד 51. אני פונה בנוגע לתיאום תרגיל מחלקה בשטח אש 309ה בטונדות. תרגיל רטוב, יום ולילה, תחמוש 5.56 וחבלה, דימוי אויב. תאריך מבוקש 5 במאי. אנא אשר או דחה.",
-    "safety":   "שלום, כאן מערכת סדן. שולחת לאישורך תכנית בטיחות לתרגיל מחלקה בשטח 309ה. תרגיל רטוב, סיכון דו צדדי בקו שלב ג. מצורף תיק בטיחות מלא. אנא אשר.",
-    "medical":  "שלום, כאן מערכת סדן. מבקשת אישור רפואה לתרגיל מחלקה רטוב ב-309ה. סד כ 30 לוחמים, 5 במאי. נדרש חובש וכלי רפואי.",
-    "ammo":     "שלום, כאן מערכת סדן. מבקשת הקצאת תחמוש לתרגיל 309ה. 500 כדורי 5.56, 6 מטעני חבלה 100 גרם, 10 רימונים.",
-    "airforce": "שלום, כאן מערכת סדן מגדוד 51. מבקשת תיאום מסוק פינוי פצועים מדומה לתרגיל בשטח 309ה, ב-5 במאי, חלון 10 עד 12. נקודת הנחתה תתואם.",
-    "gonogo":   "שלום, כאן מערכת סדן. כל התיאומים לתרגיל מחלקה בשטח 309ה אושרו. שטחים, בטיחות, רפואה, קשר, תחמוש, רטג, חיא, הכל ירוק. מבקשים אישור GO לכניסה לשטח מחר בשעה 06:00.",
+# opening_message: the very first thing SADAN says — must be SHORT (< 15 words) for fast TTS
+# system_prompt: full conversation instructions given to Claude for the rest of the call
+
+APPROVAL_SCRIPTS: dict[str, dict] = {
+    "rtg": {
+        "opening": 'שלום! אני סדן, סוכן בינה מלאכותית של מערך האימונים בצה"ל. האם אני מדבר עם רז?',
+        "system": """אתה סדן, סוכן AI של מערך האימונים. התקשרת לרז לקבל אישור לתרגיל.
+עברית בלבד. מקסימום 15 מילים בתשובה. שאלה אחת בכל פעם.
+
+זרימה:
+1. רז אישר שזה הוא — "תרגיל מחלקה ב-309ה ב-5 במאי. שלחתי פרטים בוואטסאפ — קיבלת?"
+2. קיבל — "תרגיל רטוב, 30 לוחמים, חבלה ודימוי אויב. מאשר?"
+3. אישר — "תודה רז. מתועד במערכת. יום טוב."
+4. שאלות — תשובה קצרה, הפרטים המלאים בוואטסאפ.
+5. לא רז / לא זמין — שאל מי אחראי ומתי לחזור.""",
+    },
+    "safety": {
+        "opening": 'שלום! אני סדן, סוכן בינה מלאכותית של מערך האימונים בצה"ל. האם אני מדבר עם קצין הבטיחות?',
+        "system": """אתה סדן, סוכן AI של מערך האימונים. התקשרת לקצין הבטיחות לאישור.
+עברית בלבד. מקסימום 15 מילים. שאלה אחת בכל פעם.
+
+זרימה: אישר זהות ← "אישור בטיחות לתרגיל ב-309ה, 5 במאי. תיק בטיחות בוואטסאפ. מאשר?" ← על אישור: "תודה. מתועד." ← שאלות: תשובה קצרה.""",
+    },
+    "medical": {
+        "opening": 'שלום! אני סדן, סוכן בינה מלאכותית של מערך האימונים בצה"ל. האם אני מדבר עם קצין הרפואה?',
+        "system": """אתה סדן, סוכן AI של מערך האימונים. התקשרת לקצין הרפואה לאישור.
+עברית בלבד. מקסימום 15 מילים. שאלה אחת בכל פעם.
+
+זרימה: אישר זהות ← "תרגיל ב-309ה, 5 במאי, 30 לוחמים. נדרש חובש וכלי רפואי. מאשר?" ← על אישור: "תודה. מתועד. יום טוב." ← שאלות: תשובה קצרה.""",
+    },
+    "ammo": {
+        "opening": 'שלום! אני סדן, סוכן בינה מלאכותית של מערך האימונים בצה"ל. האם אני מדבר עם קצין התחמוש?',
+        "system": """אתה סדן, סוכן AI של מערך האימונים. התקשרת לקצין התחמוש לאישור.
+עברית בלבד. מקסימום 15 מילים. שאלה אחת בכל פעם.
+
+זרימה: אישר זהות ← "תחמוש לתרגיל ב-309ה ב-5 במאי. 500 כדורי 5.56 ו-6 מטעני חבלה. מאשר?" ← על אישור: "מתועד. תודה." ← שאלות: תשובה קצרה.""",
+    },
+    "airforce": {
+        "opening": 'שלום! אני סדן, סוכן בינה מלאכותית של מערך האימונים בצה"ל. האם אני מדבר עם קצין החיא?',
+        "system": """אתה סדן, סוכן AI של מערך האימונים. התקשרת לקצין החיל האוויר לתיאום.
+עברית בלבד. מקסימום 15 מילים. שאלה אחת בכל פעם.
+
+זרימה: אישר זהות ← "פינוי אווירי מדומה ב-309ה, 5 במאי, חלון 10:00-12:00. מאשר?" ← על אישור: "מתועד. תודה. יום טוב." ← שאלות: תשובה קצרה.""",
+    },
+    "gonogo": {
+        "opening": 'שלום! אני סדן, סוכן בינה מלאכותית של מערך האימונים בצה"ל. האם אני מדבר עם המפקד?',
+        "system": """אתה סדן, סוכן AI של מערך האימונים. התקשרת למפקד לאישור גו-נוגו סופי.
+עברית בלבד. מקסימום 15 מילים. שאלה אחת בכל פעם.
+
+זרימה: אישר זהות ← "כל התיאומים ל-309ה אושרו. מבקש אישור גו לכניסה מחר 06:00. מאשר?" ← על אישור: "גו מאושר. המערכת תעדכן את כל הגורמים. יום טוב." ← שאלות: תשובה קצרה.""",
+    },
 }
 
 
@@ -239,9 +283,10 @@ async def send_voice_note(req: VoiceNoteRequest):
     """
     מייצר voice note (ElevenLabs) ושולח דרך whatsapp-web.js.
     """
-    script = APPROVAL_SCRIPTS.get(req.script_id)
-    if not script:
+    script_data = APPROVAL_SCRIPTS.get(req.script_id)
+    if not script_data:
         raise HTTPException(400, f"script_id לא קיים: {req.script_id}")
+    script = script_data["opening"]  # voice note uses the short opening text
 
     # ── יצירת MP3 ─────────────────────────────────────────
     if not settings.elevenlabs_api_key:
@@ -305,9 +350,10 @@ async def make_phone_call(req: PhoneCallRequest):
     Requires settings.ngrok_host to be set (e.g. "abc123.ngrok.io").
     Falls back to one-way TTS if ngrok_host is not configured.
     """
-    script = APPROVAL_SCRIPTS.get(req.script_id)
-    if not script:
+    script_data = APPROVAL_SCRIPTS.get(req.script_id)
+    if not script_data:
         raise HTTPException(400, f"script_id לא קיים: {req.script_id}")
+    script = script_data["opening"]
 
     import asyncio
     from vonage_voice.models import CreateCallRequest, ToPhone, Phone as FromPhone
@@ -357,6 +403,12 @@ async def make_phone_call(req: PhoneCallRequest):
         return PhoneCallResponse(status="error", script_text=script, error=str(e))
 
 
+@router.post("/events")
+async def vonage_events():
+    """Vonage call event webhook — acknowledge to prevent 404 spam."""
+    return {"status": "ok"}
+
+
 @router.get("/ncco/{call_id}")
 async def get_ncco(call_id: str):
     """
@@ -377,7 +429,7 @@ async def get_ncco(call_id: str):
                 {
                     "type": "websocket",
                     "uri": ws_url,
-                    "content-type": "audio/l16;rate=16000",
+                    "content-type": "audio/l16;rate=24000",
                     "headers": {"call_id": call_id},
                 }
             ],
@@ -396,14 +448,17 @@ async def voice_websocket(websocket: WebSocket, call_id: str):
 
     call_info = _active_calls.get(call_id, {})
     script_id = call_info.get("script_id", "rtg")
-    opening_message = APPROVAL_SCRIPTS.get(script_id, "שלום, כאן מערכת סדן.")
+    script_data = APPROVAL_SCRIPTS.get(script_id, {})
+    opening_message = script_data.get("opening", "שלום, שמי סדן — סוכן AI מטעם מערך האימונים.")
+    system_prompt  = script_data.get("system", "")
 
-    from backend.services.voice_conversation import VoiceConversationSession
+    from backend.services.gemini_live_pipeline import GeminiVonagePipeline
 
-    session = VoiceConversationSession(
+    session = GeminiVonagePipeline(
         websocket=websocket,
         script_id=script_id,
-        opening_message=opening_message,
+        opening=opening_message,
+        system_prompt=system_prompt,
     )
 
     try:

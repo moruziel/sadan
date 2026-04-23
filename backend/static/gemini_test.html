@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>סדן — שיחת קול</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0c1117;
+      color: #e5e7eb;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 24px;
+      padding: 32px;
+    }
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #c6953b;
+      letter-spacing: 2px;
+    }
+    .subtitle {
+      color: #9ca3af;
+      font-size: 0.95rem;
+    }
+    .card {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 16px;
+      padding: 32px 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      width: 100%;
+      max-width: 480px;
+    }
+    #orb {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 40% 40%, #1e3a5f, #0c1117);
+      border: 3px solid #1e40af;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+    #orb.speaking {
+      border-color: #c6953b;
+      box-shadow: 0 0 40px rgba(198, 149, 59, 0.5);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    #orb.listening {
+      border-color: #22c55e;
+      box-shadow: 0 0 30px rgba(34, 197, 94, 0.4);
+      animation: pulse 0.8s ease-in-out infinite;
+    }
+    #orb.connecting {
+      border-color: #3b82f6;
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.08); opacity: 0.85; }
+    }
+    .orb-icon { font-size: 2.5rem; user-select: none; }
+
+    #statusText {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #d1d5db;
+      min-height: 1.5em;
+      text-align: center;
+    }
+    .btn {
+      padding: 12px 32px;
+      border-radius: 10px;
+      border: none;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    #startBtn {
+      background: #22c55e;
+      color: #fff;
+    }
+    #startBtn:hover { background: #16a34a; }
+    #stopBtn {
+      background: #ef4444;
+      color: #fff;
+      display: none;
+    }
+    #stopBtn:hover { background: #dc2626; }
+    #log {
+      width: 100%;
+      max-width: 480px;
+      background: #0a0f18;
+      border: 1px solid #1f2937;
+      border-radius: 10px;
+      padding: 16px;
+      font-family: monospace;
+      font-size: 0.78rem;
+      color: #6b7280;
+      height: 160px;
+      overflow-y: auto;
+      direction: ltr;
+      text-align: left;
+    }
+    .log-info  { color: #6b7280; }
+    .log-ok    { color: #22c55e; }
+    .log-warn  { color: #f59e0b; }
+    .log-audio { color: #3b82f6; }
+  </style>
+</head>
+<body>
+  <h1>סדן</h1>
+  <div class="subtitle">מערכת שיחה קולית — Gemini Live</div>
+
+  <div class="card">
+    <div id="orb">
+      <span class="orb-icon" id="orbIcon">🎙</span>
+    </div>
+    <div id="statusText">לחץ "התחל" לחיבור</div>
+    <button class="btn" id="startBtn" onclick="startSession()">התחל שיחה</button>
+    <button class="btn" id="stopBtn"  onclick="stopSession()">סיים שיחה</button>
+  </div>
+
+  <div id="log"></div>
+
+  <script>
+    // ── Config ─────────────────────────────────────────────────
+    const WS_URL = `ws://${location.host}/gemini-voice/ws`;
+    const MIC_SAMPLE_RATE  = 16000;   // must match Gemini input expectation
+    const OUT_SAMPLE_RATE  = 24000;   // Gemini output is 24 kHz PCM
+
+    // ── State ──────────────────────────────────────────────────
+    let ws = null;
+    let micCtx = null;
+    let outCtx = null;
+    let micStream = null;
+    let processor = null;
+    let nextPlayTime = 0;   // scheduled playback position
+
+    // ── UI helpers ─────────────────────────────────────────────
+    function log(msg, cls = 'log-info') {
+      const el = document.getElementById('log');
+      const line = document.createElement('div');
+      line.className = cls;
+      line.textContent = `${new Date().toLocaleTimeString('he-IL')} ${msg}`;
+      el.appendChild(line);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function setOrb(state) {
+      const orb = document.getElementById('orb');
+      const icon = document.getElementById('orbIcon');
+      orb.className = state;
+      const icons = { idle: '🎙', connecting: '⏳', listening: '🎙', speaking: '🔊' };
+      icon.textContent = icons[state] || '🎙';
+    }
+
+    function setStatus(txt, orbState) {
+      document.getElementById('statusText').textContent = txt;
+      setOrb(orbState);
+    }
+
+    // ── Session start ──────────────────────────────────────────
+    async function startSession() {
+      document.getElementById('startBtn').style.display = 'none';
+      document.getElementById('stopBtn').style.display  = 'inline-block';
+      setStatus('מתחבר...', 'connecting');
+      log('מתחבר לשרת...');
+
+      // 1. Microphone
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: { sampleRate: MIC_SAMPLE_RATE, channelCount: 1, echoCancellation: true }
+        });
+      } catch (e) {
+        log(`שגיאת מיקרופון: ${e.message}`, 'log-warn');
+        stopSession();
+        return;
+      }
+
+      // AudioContext for capture — request 16 kHz (browser may honour or resample)
+      micCtx = new AudioContext({ sampleRate: MIC_SAMPLE_RATE });
+      const source = micCtx.createMediaStreamSource(micStream);
+
+      // ScriptProcessor: Float32 → Int16 → WebSocket
+      // Buffer 4096 @ 16 kHz = ~256 ms per chunk (fine for streaming)
+      processor = micCtx.createScriptProcessor(4096, 1, 1);
+      processor.onaudioprocess = (e) => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        const f32 = e.inputBuffer.getChannelData(0);
+        const i16 = new Int16Array(f32.length);
+        for (let i = 0; i < f32.length; i++) {
+          i16[i] = Math.max(-32768, Math.min(32767, Math.round(f32[i] * 32767)));
+        }
+        ws.send(i16.buffer);
+      };
+      source.connect(processor);
+      processor.connect(micCtx.destination);  // must connect to graph
+
+      // AudioContext for 24 kHz playback
+      outCtx = new AudioContext({ sampleRate: OUT_SAMPLE_RATE });
+      nextPlayTime = outCtx.currentTime;
+
+      // 2. WebSocket
+      ws = new WebSocket(WS_URL);
+      ws.binaryType = 'arraybuffer';
+
+      ws.onopen = () => {
+        log('✅ מחובר לסדן', 'log-ok');
+        setStatus('מקשיב...', 'listening');
+      };
+
+      ws.onmessage = (evt) => {
+        if (typeof evt.data === 'string') {
+          // Control message from server
+          try {
+            const msg = JSON.parse(evt.data);
+            if (msg.type === 'interrupted') {
+              log('↩ הפסקה — מנקה תור אודיו', 'log-warn');
+              nextPlayTime = outCtx.currentTime;  // flush queue
+            }
+          } catch (_) {}
+          return;
+        }
+
+        // Binary → 24 kHz PCM playback
+        const i16 = new Int16Array(evt.data);
+        const f32 = new Float32Array(i16.length);
+        for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768.0;
+
+        const buf = outCtx.createBuffer(1, f32.length, OUT_SAMPLE_RATE);
+        buf.getChannelData(0).set(f32);
+
+        const src = outCtx.createBufferSource();
+        src.buffer = buf;
+        src.connect(outCtx.destination);
+
+        // Schedule contiguously — prevents gaps/overlaps
+        const startAt = Math.max(nextPlayTime, outCtx.currentTime + 0.05);
+        src.start(startAt);
+        nextPlayTime = startAt + buf.duration;
+
+        const durMs = (buf.duration * 1000).toFixed(0);
+        log(`◀ אודיו ${durMs}ms`, 'log-audio');
+        setStatus('מדבר...', 'speaking');
+
+        // After this chunk ends, revert to listening state
+        src.onended = () => {
+          if (nextPlayTime <= outCtx.currentTime + 0.1) {
+            setStatus('מקשיב...', 'listening');
+          }
+        };
+      };
+
+      ws.onerror = (e) => {
+        log(`שגיאת WebSocket: ${e.type}`, 'log-warn');
+      };
+
+      ws.onclose = () => {
+        log('חיבור נסגר', 'log-warn');
+        stopSession();
+      };
+    }
+
+    // ── Session stop ───────────────────────────────────────────
+    function stopSession() {
+      if (processor) { processor.disconnect(); processor = null; }
+      if (micCtx)    { micCtx.close();    micCtx = null; }
+      if (outCtx)    { outCtx.close();   outCtx = null; }
+      if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+      if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+      ws = null;
+
+      document.getElementById('startBtn').style.display = 'inline-block';
+      document.getElementById('stopBtn').style.display  = 'none';
+      setStatus('לחץ "התחל" לחיבור', 'idle');
+      log('--- שיחה הסתיימה ---');
+    }
+  </script>
+</body>
+</html>
