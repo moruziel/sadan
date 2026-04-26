@@ -360,6 +360,115 @@ class GeminiLivePipeline:
             ]
         )
 
+        # sim_pause — pause the simulation
+        sim_pause_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="sim_pause",
+                    description="עצור את הסימולציה הטקטית. הפעל כשהמשתמש אומר 'עצור', 'רגע', 'הקפא'.",
+                    parameters=types.Schema(type=types.Type.OBJECT, properties={}),
+                )
+            ]
+        )
+
+        # sim_resume — resume the simulation
+        sim_resume_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="sim_resume",
+                    description="המשך את הסימולציה הטקטית. הפעל כשהמשתמש אומר 'המשך', 'תמשיך', 'הפעל'.",
+                    parameters=types.Schema(type=types.Type.OBJECT, properties={}),
+                )
+            ]
+        )
+
+        # sim_goto_phase — jump to a specific simulation phase
+        sim_goto_phase_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="sim_goto_phase",
+                    description=(
+                        "קפוץ לשלב מסוים בסימולציה. "
+                        "שלבים: 0=כינוס, 1=תנועה, 2=ביסוס, 3=כיסוי, "
+                        "4=הסתערות יעד א׳, 5=מעבר, 6=כיבוש יעד ב׳, 7=נסיגה."
+                    ),
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "phase": types.Schema(
+                                type=types.Type.INTEGER,
+                                description="מספר השלב 0–7",
+                            ),
+                        },
+                        required=["phase"],
+                    ),
+                )
+            ]
+        )
+
+        # sim_show_unit — fly map to a specific unit's current position
+        sim_show_unit_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="sim_show_unit",
+                    description=(
+                        "הצג יחידה ספציפית על המפה — המפה תטוס אליה. "
+                        "הפעל כשמבקשים 'תראה לי כיתה ב׳', 'איפה המ"מ', וכו׳."
+                    ),
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "unit_id": types.Schema(
+                                type=types.Type.STRING,
+                                description="מזהה היחידה: kitaA / kitaB / kitaG / mm",
+                            ),
+                        },
+                        required=["unit_id"],
+                    ),
+                )
+            ]
+        )
+
+        # fill_field — fill a field in the combat procedure (נוהל קרב)
+        fill_field_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="fill_field",
+                    description=(
+                        "מלא שדה ספציפי בנוהל הקרב (מסך נוהל קרב בתיק התרגיל). "
+                        "הפעל כשהמשתמש מבקש לעדכן, למלא, לשנות, לכתוב או להוסיף מידע בנוהל הקרב. "
+                        "section: missionReceived/situationAssessment/plan/order/preparations. "
+                        "field_id: מזהה השדה (לדוגמה: mission_source, enemy, plan_concept, phase1, prep_h24)."
+                    ),
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "field_id": types.Schema(
+                                type=types.Type.STRING,
+                                description=(
+                                    "מזהה השדה לעדכון. אפשרויות לפי section: "
+                                    "missionReceived: mission_source/mission_time/mission_location/mission_essence. "
+                                    "situationAssessment: enemy/terrain/ownForces/time/conclusion. "
+                                    "plan: plan_concept/plan_main/plan_reserve/plan_alt. "
+                                    "order: enemy_detail/friendly/mission_full/phase1/phase2/phase3/phase4/phase5/phase6/ammo_log/medical_l/water_l/cmd_loc/callsign/freq. "
+                                    "preparations: prep_h72/prep_h48/prep_h24/prep_h4/prep_h1."
+                                ),
+                            ),
+                            "value": types.Schema(
+                                type=types.Type.STRING,
+                                description="הערך החדש למילוי בשדה",
+                            ),
+                            "section": types.Schema(
+                                type=types.Type.STRING,
+                                description="הסקשן: missionReceived / situationAssessment / plan / order / preparations",
+                            ),
+                        },
+                        required=["field_id", "value", "section"],
+                    ),
+                )
+            ]
+        )
+
         config = types.LiveConnectConfig(
             response_modalities=[types.Modality.AUDIO],
             system_instruction=types.Content(
@@ -382,7 +491,8 @@ class GeminiLivePipeline:
             tools=[
                 send_wa_tool, toggle_3d_tool,
                 map_fly_to_tool, map_zoom_tool, map_rotate_tool, map_show_layer_tool,
-                app_navigate_tool, map_show_element_tool,
+                app_navigate_tool, map_show_element_tool, fill_field_tool,
+                sim_pause_tool, sim_resume_tool, sim_goto_phase_tool, sim_show_unit_tool,
             ],
         )
 
@@ -572,6 +682,53 @@ class GeminiLivePipeline:
                                             response={"error": f"element '{element_key}' not found"},
                                         )
                                     ])
+
+                            elif fc.name == "fill_field":
+                                args = fc.args or {}
+                                await self.websocket.send_text(json.dumps({
+                                    "type":     "fill_field",
+                                    "field_id": str(args.get("field_id", "")),
+                                    "value":    str(args.get("value", "")),
+                                    "section":  str(args.get("section", "")),
+                                }, ensure_ascii=False))
+                                logger.info(f"[Gemini Live] fill_field: section={args.get('section')} field={args.get('field_id')}")
+                                await session.send_tool_response(function_responses=[
+                                    types.FunctionResponse(name="fill_field", id=fc.id, response={"result": "filled"})
+                                ])
+
+                            elif fc.name == "sim_pause":
+                                await self.websocket.send_text(json.dumps({"type": "sim_pause"}, ensure_ascii=False))
+                                logger.info("[Gemini Live] sim_pause")
+                                await session.send_tool_response(function_responses=[
+                                    types.FunctionResponse(name="sim_pause", id=fc.id, response={"result": "paused"})
+                                ])
+
+                            elif fc.name == "sim_resume":
+                                await self.websocket.send_text(json.dumps({"type": "sim_resume"}, ensure_ascii=False))
+                                logger.info("[Gemini Live] sim_resume")
+                                await session.send_tool_response(function_responses=[
+                                    types.FunctionResponse(name="sim_resume", id=fc.id, response={"result": "resumed"})
+                                ])
+
+                            elif fc.name == "sim_goto_phase":
+                                phase_n = int((fc.args or {}).get("phase", 0))
+                                await self.websocket.send_text(json.dumps({
+                                    "type": "sim_goto_phase", "phase": phase_n,
+                                }, ensure_ascii=False))
+                                logger.info(f"[Gemini Live] sim_goto_phase: phase={phase_n}")
+                                await session.send_tool_response(function_responses=[
+                                    types.FunctionResponse(name="sim_goto_phase", id=fc.id, response={"result": "ok", "phase": phase_n})
+                                ])
+
+                            elif fc.name == "sim_show_unit":
+                                unit_id = str((fc.args or {}).get("unit_id", ""))
+                                await self.websocket.send_text(json.dumps({
+                                    "type": "sim_show_unit", "unit_id": unit_id,
+                                }, ensure_ascii=False))
+                                logger.info(f"[Gemini Live] sim_show_unit: unit={unit_id}")
+                                await session.send_tool_response(function_responses=[
+                                    types.FunctionResponse(name="sim_show_unit", id=fc.id, response={"result": "ok", "unit": unit_id})
+                                ])
 
                     if not response.server_content:
                         continue

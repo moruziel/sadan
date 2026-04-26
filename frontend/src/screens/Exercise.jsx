@@ -4,15 +4,16 @@ import {
   ClipboardList, ShieldCheck, Target, AlertTriangle,
   CheckSquare, Megaphone, FileText, Download, Pencil, ChevronLeft,
   Handshake, ChevronDown, Mail, Calendar, Share2, Info, Package,
-  Radio, Utensils, Stethoscope, Box,
+  Radio, Utensils, Stethoscope, Box, Sword, Play,
 } from 'lucide-react'
 import Header from '../components/common/Header'
 import FireMiniMap from '../components/map/FireMiniMap'
 import BackButton from '../components/common/BackButton'
 import DataSourcesDiagram from '../components/common/DataSourcesDiagram'
 import { EXERCISE_FILE } from '../data/mockData'
+import CombatProcedure from '../components/CombatProcedure'
 
-const ICON_MAP = { ClipboardList, ShieldCheck, Target, AlertTriangle, CheckSquare, Megaphone, FileText, Handshake, Package }
+const ICON_MAP = { ClipboardList, ShieldCheck, Target, AlertTriangle, CheckSquare, Megaphone, FileText, Handshake, Package, Sword }
 
 const STATUS_STYLE = {
   ok:       { dot: 'bg-demo-success', badge: 'text-demo-success',   label: '✓' },
@@ -588,6 +589,13 @@ const EXTRA_SECTIONS = [
     status: 'pending',
     statusLabel: '⏳ חי"א ממתין',
   },
+  {
+    id: 'combat',
+    icon: 'Sword',
+    label: 'נוהל קרב',
+    status: 'ok',
+    statusLabel: '',
+  },
 ]
 
 export default function Exercise() {
@@ -613,6 +621,7 @@ export default function Exercise() {
   const active = allSections.find(s => s.id === activeId)
 
   function renderContent() {
+    if (activeId === 'combat')     return <CombatProcedure />
     if (activeId === 'collab')     return <CollabContent />
     if (activeId === 'fire')       return <FireContent section={active} />
     if (activeId === 'general')    return <GeneralContent section={active} />
@@ -692,6 +701,12 @@ export default function Exercise() {
             <Info size={13} /> מקורות
           </button>
           <ExportDropdown />
+          <button
+            onClick={() => navigate('/simulation')}
+            className="flex items-center gap-1 px-3 py-1.5 bg-demo-gold/15 border border-demo-gold/40 rounded-lg text-demo-gold hover:bg-demo-gold/25 text-xs transition-colors font-semibold"
+          >
+            <Play size={13} /> סימולציה
+          </button>
           <button className="flex items-center gap-1 px-3 py-1.5 bg-demo-card border border-demo-border rounded-lg text-gray-400 hover:text-white text-xs transition-colors">
             <Pencil size={13} /> עריכה
           </button>
@@ -775,10 +790,12 @@ export default function Exercise() {
         {/* תוכן */}
         <div
           key={activeId}
-          className={`flex-1 min-h-0 bg-white text-gray-800 animate-fade-in
-            ${activeId === 'fire'
-              ? 'overflow-hidden flex flex-col p-4'
-              : 'overflow-y-auto p-6'}`}
+          className={`flex-1 min-h-0 animate-fade-in
+            ${activeId === 'combat'
+              ? 'overflow-hidden bg-[#0a1a0a] text-gray-200'
+              : activeId === 'fire'
+              ? 'overflow-hidden flex flex-col p-4 bg-white text-gray-800'
+              : 'overflow-y-auto p-6 bg-white text-gray-800'}`}
         >
           {renderContent()}
         </div>

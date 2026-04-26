@@ -353,6 +353,22 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
               window.dispatchEvent(new CustomEvent('sadan:navigate', {
                 detail: { path: msg.path }
               }))
+            } else if (msg.type === 'fill_field') {
+              window.dispatchEvent(new CustomEvent('fillField', {
+                detail: { field_id: msg.field_id, value: msg.value, section: msg.section }
+              }))
+            } else if (msg.type === 'sim_pause') {
+              window.dispatchEvent(new CustomEvent('sadan:sim_pause'))
+            } else if (msg.type === 'sim_resume') {
+              window.dispatchEvent(new CustomEvent('sadan:sim_resume'))
+            } else if (msg.type === 'sim_goto_phase') {
+              window.dispatchEvent(new CustomEvent('sadan:sim_goto_phase', {
+                detail: { phase: msg.phase }
+              }))
+            } else if (msg.type === 'sim_show_unit') {
+              window.dispatchEvent(new CustomEvent('sadan:sim_show_unit', {
+                detail: { unit_id: msg.unit_id }
+              }))
             }
           } catch (_) {}
         }

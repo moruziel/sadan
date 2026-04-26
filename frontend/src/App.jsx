@@ -12,6 +12,7 @@ import Exercise       from './screens/Exercise'
 import Quiz           from './screens/Quiz'
 import Approvals      from './screens/Approvals'
 import DemoChecklist  from './screens/DemoChecklist'
+import Simulation     from './screens/Simulation'
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/quiz"          element={<Quiz />} />
           <Route path="/approvals"     element={<Approvals />} />
           <Route path="/demo-check"    element={<DemoChecklist />} />
+          <Route path="/simulation"    element={<Simulation />} />
           <Route path="*"              element={<Navigate to="/" replace />} />
         </Routes>
       </div>
