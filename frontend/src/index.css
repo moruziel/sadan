@@ -61,6 +61,52 @@ body.sadan-chat-open .sadan-main-content {
 ::-webkit-scrollbar-track { background: #f1f1f1; }
 ::-webkit-scrollbar-thumb { background: #6b7c3a; border-radius: 3px; }
 
+/* ── Simulation tactical animations ─────────────────────── */
+@keyframes simPulse {
+  0%, 100% { box-shadow: var(--bs-normal, 0 0 14px rgba(100,150,255,0.5)); }
+  50%       { box-shadow: var(--bs-pulse,  0 0 30px rgba(100,150,255,0.9), 0 0 50px rgba(100,150,255,0.4)); }
+}
+@keyframes objPulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(239,68,68,0.55); transform: scale(1); }
+  50%       { box-shadow: 0 0 35px rgba(239,68,68,0.9),  0 0 60px rgba(239,68,68,0.4); transform: scale(1.08); }
+}
+@keyframes objCapture {
+  0%   { box-shadow: 0 0 14px rgba(239,68,68,0.55); border-color: #ef4444; }
+  30%  { box-shadow: 0 0 60px rgba(251,146,60,1),   0 0 100px rgba(251,146,60,0.7); transform: scale(2.2); border-color: #fb923c; }
+  60%  { box-shadow: 0 0 30px rgba(34,197,94,0.8);  transform: scale(1.4);  border-color: #22c55e; }
+  100% { box-shadow: 0 0 14px rgba(34,197,94,0.6);  transform: scale(1);    border-color: #22c55e; animation: none; }
+}
+@keyframes phaseCardIn {
+  0%   { opacity: 0; transform: translate(-50%,-50%) scale(0.88); }
+  12%  { opacity: 1; transform: translate(-50%,-50%) scale(1.02); }
+  20%  { transform: translate(-50%,-50%) scale(1); }
+  75%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes heliFloat {
+  0%, 100% { transform: translateY(0) rotate(-5deg); }
+  50%       { transform: translateY(-6px) rotate(5deg); }
+}
+@keyframes tankFire {
+  0%, 100% { transform: scale(1); }
+  20%       { transform: scale(1.4) rotate(-3deg); }
+  40%       { transform: scale(0.9) rotate(2deg); }
+}
+@keyframes shellFly {
+  0%   { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes fogFade {
+  from { opacity: 0.55; }
+  to   { opacity: 0; }
+}
+@keyframes firePulse {
+  0%, 100% { opacity: 0.85; }
+  50%       { opacity: 0.35; }
+}
+/* ─────────────────────────────────────────────────────────── */
+
 /* Markdown-like formatting in chat bubbles */
 .prose-rtl p { margin: 0 0 8px 0; }
 .prose-rtl p:last-child { margin-bottom: 0; }
