@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
   MapPin, AlertTriangle, Clock, Star, Layers, Users,
@@ -14,28 +14,40 @@ import { AREA_309 } from '../data/mockData'
 import { DEMO_FIELDS_251 } from '../data/region251.js'
 
 const LAYER_OPTIONS = [
-  { key: 'forces',        label: 'כוחות ומטרות',  icon: Target },
-  { key: 'hazards',       label: 'מפגעים',        icon: AlertTriangle },
-  { key: 'infrastructure',label: 'תשתיות',         icon: MapPin },
-  { key: 'neighbors',     label: 'כוחות שכנים',    icon: Users },
-  { key: 'history',       label: 'היסטוריה',       icon: Clock },
+  { key: 'forces',        label: 'כוחות',     icon: Target },
+  { key: 'hazards',       label: 'מפגעים',    icon: AlertTriangle },
+  { key: 'infrastructure',label: 'תשתיות',    icon: MapPin },
+  { key: 'neighbors',     label: 'שכנים',     icon: Users },
+  { key: 'history',       label: 'היסטוריה',  icon: Clock },
+  { key: 'natbam',        label: 'נת"ב',      icon: AlertTriangle },
 ]
 
 // ── Single field info panel ───────────────────────────────
-function FieldInfoPanel({ field, onContinue, showCalendar = false }) {
+function FieldInfoPanel({ field, onContinue, showCalendar = false, onDeselect = null }) {
   const isArea309 = field.id === '309h' || !field.code
   return (
     <>
       {/* כותרת */}
       <div className="bg-demo-bg px-4 py-3 border-b border-demo-border">
         <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-white font-bold text-base">{field.name}</h2>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-white font-bold text-base truncate">{field.name}</h2>
             <p className="text-gray-400 text-xs">{field.region}</p>
           </div>
-          <div className="text-center">
-            <div className="text-2xl font-black text-demo-gold">{field.score}</div>
-            <div className="text-[11px] text-gray-400">ציון התאמה</div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="text-center">
+              <div className="text-2xl font-black text-demo-gold">{field.score}</div>
+              <div className="text-[11px] text-gray-400">ציון התאמה</div>
+            </div>
+            {onDeselect && (
+              <button
+                onClick={onDeselect}
+                className="text-xs text-gray-500 hover:text-demo-gold border border-demo-border hover:border-demo-gold/40 px-2 py-1 rounded-lg transition-all"
+                title="שנה שטח"
+              >
+                שנה
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -154,30 +166,84 @@ function FieldInfoPanel({ field, onContinue, showCalendar = false }) {
 }
 
 // ── Region selector panel (before a field is chosen) ─────
-function RegionSelectorPanel({ mode }) {
+function RegionSelectorPanel({ mode, onFieldSelect, onlyAvailable, onToggleAvailable }) {
+  const [query, setQuery] = useState('')
+
+  const filtered = useMemo(() => {
+    let fields = DEMO_FIELDS_251
+    if (onlyAvailable) fields = fields.filter(f => f.available)
+    const q = query.trim().toLowerCase()
+    if (!q) return fields
+    return fields.filter(f =>
+      f.code?.toLowerCase().includes(q) ||
+      f.name?.toLowerCase().includes(q) ||
+      f.region?.toLowerCase().includes(q)
+    )
+  }, [query, onlyAvailable])
+
+  function handleKey(e) {
+    if (e.key !== 'Enter') return
+    if (filtered.length > 0 && onFieldSelect) {
+      onFieldSelect(filtered[0])
+      setQuery('')
+    }
+  }
+
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-6 space-y-4">
-      <div className="text-center space-y-2">
-        <div className="text-4xl">📍</div>
-        <h2 className="text-white font-bold text-base">
-          {mode === 'urgent' ? 'שטחים פנויים — לחץ לבחירה' : 'בחר שטח מהמפה'}
-        </h2>
-        <p className="text-gray-400 text-sm leading-relaxed">
-          {mode === 'free'
-            ? 'לחץ על אחד מסמלי השטחים על המפה לצפייה בפרטים'
-            : 'סדן מציגה את שטחי האש המתאימים ביותר לגזרה שלך — מדורגים לפי ציון התאמה.'
-          }
-        </p>
+    <div className="flex-1 flex flex-col p-4 space-y-3 overflow-y-auto">
+      <div className="text-center space-y-1 pt-2">
+        <div className="text-3xl">📍</div>
+        <h2 className="text-white font-bold text-sm">בחר שטח</h2>
       </div>
 
-      {/* רשימה מהירה */}
-      <div className="w-full space-y-2 mt-4">
-        {DEMO_FIELDS_251.map(f => (
-          <div key={f.id}
-            className="flex items-center justify-between px-3 py-2 bg-demo-surface rounded-xl border border-demo-border text-sm"
+      {/* חיפוש */}
+      <div className="flex items-center gap-2 bg-demo-surface border border-demo-border rounded-xl px-3 py-2">
+        <span className="text-gray-500 text-sm flex-shrink-0">🔍</span>
+        <input
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={handleKey}
+          placeholder="חפש שטח... Enter לבחירה"
+          className="flex-1 bg-transparent text-white text-sm focus:outline-none placeholder:text-gray-600 text-right"
+          dir="rtl"
+        />
+        {query && (
+          <button
+            onClick={() => setQuery('')}
+            className="text-gray-500 hover:text-white text-xs flex-shrink-0"
+          >✕</button>
+        )}
+      </div>
+
+      {/* פילטר זמינות */}
+      <button
+        onClick={onToggleAvailable}
+        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-semibold transition-all
+          ${onlyAvailable
+            ? 'bg-green-950/60 border-green-800/60 text-green-600'
+            : 'bg-demo-surface border-demo-border text-gray-400 hover:border-demo-gold/40'
+          }`}
+      >
+        <span>{onlyAvailable ? '✓ מציג זמינים בלבד' : 'הכל (כולל תפוסים)'}</span>
+        <span className={`w-8 h-4 rounded-full relative transition-all ${onlyAvailable ? 'bg-green-500' : 'bg-demo-border'}`}>
+          <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${onlyAvailable ? 'right-0.5' : 'left-0.5'}`} />
+        </span>
+      </button>
+
+      {/* רשימה קליקבילית */}
+      <div className="w-full space-y-1.5">
+        {filtered.length === 0 && (
+          <p className="text-center text-gray-500 text-xs py-4">לא נמצאו שטחים</p>
+        )}
+        {filtered.map(f => (
+          <button
+            key={f.id}
+            onClick={() => onFieldSelect && onFieldSelect(f)}
+            className="w-full flex items-center justify-between px-3 py-2.5 bg-demo-surface rounded-xl border border-demo-border text-sm hover:border-demo-gold/50 hover:bg-demo-card transition-all text-right"
           >
             <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full inline-block ${f.available ? 'bg-green-400' : 'bg-red-400'}`} />
+              <span className={`w-2 h-2 rounded-full inline-block flex-shrink-0 ${f.available ? 'bg-green-400' : 'bg-red-400'}`} />
               <span className="text-white font-medium">{f.code}</span>
               {f.recommended && (
                 <span className="bg-demo-gold/20 text-demo-gold text-[11px] px-1.5 py-0.5 rounded-full font-bold">★</span>
@@ -187,12 +253,12 @@ function RegionSelectorPanel({ mode }) {
               <span>{f.region}</span>
               <span className="font-bold text-demo-gold">{f.score}</span>
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
       <div className="bg-blue-900/20 border border-blue-500/20 rounded-xl px-3 py-2 text-xs text-blue-300 text-center">
-        ℹ️ דו"ח נפלים חייב להיות מוגש עד יום ה׳ 17:00 — אחרת האימון ייחסם.
+        ℹ️ דו"ח נפלים — הגשה עד יום ה׳ 17:00
       </div>
     </div>
   )
@@ -204,9 +270,22 @@ export default function Area() {
   const location    = useLocation()
   const mode        = location.state?.mode || 'single'
 
-  const [layers, setLayers]           = useState({ forces: true, hazards: true, infrastructure: false, neighbors: false, history: false })
+  const [layers, setLayers]           = useState({ forces: true, hazards: true, infrastructure: false, neighbors: false, history: false, natbam: false })
   const [selectedField, setSelectedField] = useState(null)
   const [showDiagram, setShowDiagram]     = useState(false)
+  const [onlyAvailable, setOnlyAvailable] = useState(false)
+
+  // ── SADAN voice: show/hide layer ─────────────────────────
+  useEffect(() => {
+    const handle = (e) => {
+      const { layer, visible } = e.detail
+      if (layer in { forces:1, hazards:1, infrastructure:1, neighbors:1, history:1 }) {
+        setLayers(prev => ({ ...prev, [layer]: visible }))
+      }
+    }
+    window.addEventListener('sadan:show_layer', handle)
+    return () => window.removeEventListener('sadan:show_layer', handle)
+  }, [])
 
   function toggleLayer(key) {
     setLayers(prev => ({ ...prev, [key]: !prev[key] }))
@@ -259,10 +338,11 @@ export default function Area() {
                 <button
                   key={key}
                   onClick={() => toggleLayer(key)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-md
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all
+                    bg-black/40 backdrop-blur-sm
                     ${layers[key]
-                      ? 'bg-demo-gold text-black'
-                      : 'bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm'
+                      ? `border-2 ${key === 'natbam' ? 'border-red-400 text-red-300' : 'border-demo-gold text-demo-gold'}`
+                      : 'border border-white/20 text-gray-400'
                     }`}
                 >
                   <Icon size={13} />
@@ -292,7 +372,12 @@ export default function Area() {
               showCalendar
             />
           ) : (
-            <RegionSelectorPanel mode={mode} />
+            <RegionSelectorPanel
+              mode={mode}
+              onFieldSelect={setSelectedField}
+              onlyAvailable={onlyAvailable}
+              onToggleAvailable={() => setOnlyAvailable(v => !v)}
+            />
           )}
         </div>
 
@@ -300,17 +385,34 @@ export default function Area() {
         <div className="flex-1 relative min-h-0">
           <RegionMapView
             mode={mode}
+            layers={layers}
             selectedFieldId={selectedField?.id}
             onFieldSelect={field => setSelectedField(field)}
           />
-          {/* מקורות מידע */}
-          <button
-            onClick={() => setShowDiagram(true)}
-            className="absolute top-3 left-3 z-10 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-md bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm hover:text-demo-gold hover:border-demo-gold/40"
-          >
-            <Info size={13} />
-            מקורות
-          </button>
+          {/* שכבות מידע + מקורות — שמאל, מתחת ל-NavigationControl */}
+          <div className="absolute top-28 left-3 z-10 flex flex-col gap-1.5">
+            <button
+              onClick={() => setShowDiagram(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-md bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm hover:text-demo-gold hover:border-demo-gold/40"
+            >
+              <Info size={13} />
+              מקורות
+            </button>
+            {LAYER_OPTIONS.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => toggleLayer(key)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-md
+                  ${layers[key]
+                    ? 'bg-demo-gold text-black'
+                    : 'bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm'
+                  }`}
+              >
+                <Icon size={13} />
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>

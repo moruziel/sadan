@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
 import SadanChat from './components/common/SadanChat'
 
 import Login          from './screens/Login'
@@ -15,30 +16,49 @@ import DemoChecklist  from './screens/DemoChecklist'
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/"                element={<Login />} />
-        <Route path="/field-selection" element={<FieldSelection />} />
-        <Route path="/area"            element={<Area />} />
-        <Route path="/calendar"        element={<AreaCalendar />} />
-        <Route path="/questionnaire" element={<Questionnaire />} />
-        <Route path="/plans"         element={<Plans />} />
-        <Route path="/exercise"      element={<Exercise />} />
-        <Route path="/quiz"          element={<Quiz />} />
-        <Route path="/approvals"     element={<Approvals />} />
-        <Route path="/demo-check"    element={<DemoChecklist />} />
-        <Route path="*"              element={<Navigate to="/" replace />} />
-      </Routes>
+      {/* sadan-main-content נדחף ימינה כשהצ'אט נפתח */}
+      <div className="sadan-main-content">
+        <Routes>
+          <Route path="/"                element={<Login />} />
+          <Route path="/field-selection" element={<FieldSelection />} />
+          <Route path="/area"            element={<Area />} />
+          <Route path="/calendar"        element={<AreaCalendar />} />
+          <Route path="/questionnaire" element={<Questionnaire />} />
+          <Route path="/plans"         element={<Plans />} />
+          <Route path="/exercise"      element={<Exercise />} />
+          <Route path="/quiz"          element={<Quiz />} />
+          <Route path="/approvals"     element={<Approvals />} />
+          <Route path="/demo-check"    element={<DemoChecklist />} />
+          <Route path="*"              element={<Navigate to="/" replace />} />
+        </Routes>
+      </div>
 
-      {/* SadanChat מופיע בכל מסך חוץ מ-Login */}
+      {/* SadanChat — מחוץ ל-wrapper כדי שלא יידחף */}
       <SadanChatWrapper />
+      {/* NavigationController — מקשיב לפקודות ניווט מהצ'אט */}
+      <NavigationController />
     </BrowserRouter>
   )
 }
 
+// On these paths the chat UI is hidden but the component stays mounted (WS alive)
 const NO_CHAT_PATHS = new Set(['/', '/field-selection', '/quiz', '/demo-check'])
 
 function SadanChatWrapper() {
   const { pathname } = useLocation()
-  if (NO_CHAT_PATHS.has(pathname)) return null
-  return <SadanChat />
+  return <SadanChat visible={!NO_CHAT_PATHS.has(pathname)} />
+}
+
+// ── SADAN navigation controller — listens to voice/text nav commands ──
+function NavigationController() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    const handle = (e) => {
+      const { path } = e.detail
+      if (path) navigate(path)
+    }
+    window.addEventListener('sadan:navigate', handle)
+    return () => window.removeEventListener('sadan:navigate', handle)
+  }, [navigate])
+  return null
 }

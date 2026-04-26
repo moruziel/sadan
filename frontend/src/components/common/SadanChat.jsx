@@ -100,7 +100,7 @@ function LiveWaveform({ analyserRef, active }) {
 }
 
 // ── Main component ─────────────────────────────────────────
-export default function SadanChat({ autoOpen = false }) {
+export default function SadanChat({ autoOpen = false, visible = true }) {
   const [open, setOpen]           = useState(autoOpen)
   const [messages, setMessages]   = useState([{
     id: 0,
@@ -115,17 +115,20 @@ export default function SadanChat({ autoOpen = false }) {
   const [error, setError]         = useState(null)
 
   // Audio refs
-  const wsRef           = useRef(null)
-  const micContextRef   = useRef(null)
-  const playContextRef  = useRef(null)
-  const processorRef    = useRef(null)
-  const analyserRef     = useRef(null)
-  const micStreamRef    = useRef(null)
-  const nextPlayTime    = useRef(0)
-  const activeSources   = useRef([])
-  const messagesEnd     = useRef(null)
-  // Transcript accumulation — tracks the id of the "live" bubble per role
-  const liveTranscript  = useRef({ user: null, assistant: null })
+  const wsRef             = useRef(null)
+  const micContextRef     = useRef(null)
+  const playContextRef    = useRef(null)
+  const processorRef      = useRef(null)
+  const analyserRef       = useRef(null)
+  const micStreamRef      = useRef(null)
+  const nextPlayTime      = useRef(0)
+  const activeSources     = useRef([])
+  const messagesEnd       = useRef(null)
+  const liveTranscript    = useRef({ user: null, assistant: null })  // { id, accumulated } | null
+  const speakingRef       = useRef(false)   // mirrors speaking state — readable from ScriptProcessor closure
+  // Auto-reconnect
+  const wantConnected     = useRef(false)   // user intent: true = stay connected
+  const reconnectTimer    = useRef(null)
 
   useEffect(() => {
     messagesEnd.current?.scrollIntoView({ behavior: 'smooth' })
@@ -136,7 +139,18 @@ export default function SadanChat({ autoOpen = false }) {
   }, [autoOpen])
 
   useEffect(() => {
-    const handleOpen = () => setOpen(true)
+    const handleOpen = (e) => {
+      setOpen(true)
+      const msg = e?.detail?.message
+      if (!msg) return
+      // שלח הודעה ישירות — אותה לוגיקה כמו sendText, בלי תלות ב-closure
+      setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: msg }])
+      setLoading(true)
+      apiChatText(msg)
+        .then(data => setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: data.reply }]))
+        .catch(() => setMessages(prev => [...prev, { id: Date.now() + 1, role: 'system', content: 'שגיאה בתקשורת' }]))
+        .finally(() => setLoading(false))
+    }
     window.addEventListener('sadanOpen', handleOpen)
     return () => window.removeEventListener('sadanOpen', handleOpen)
   }, [])
@@ -158,21 +172,41 @@ export default function SadanChat({ autoOpen = false }) {
     setMessages(prev => [...prev, { id: Date.now() + Math.random(), role, content }])
   }
 
-  // Transcript: accumulate partial chunks into a live bubble, finalize on turn_complete
+  // Transcript: accumulate partial chunks into a live bubble, finalize on turn_complete.
+  // liveTranscript.current[role] = { id, accumulated } | null
   function handleTranscript(role, text, final) {
-    const existingId = liveTranscript.current[role]
-    if (existingId) {
-      // Update existing live bubble
-      setMessages(prev => prev.map(m =>
-        m.id === existingId ? { ...m, content: m.content + text } : m
-      ))
-      if (final) liveTranscript.current[role] = null
+    const live = liveTranscript.current[role]
+    if (live) {
+      // We have an open bubble — append only the NEW text.
+      // On `final` we REPLACE with the clean accumulated text so Gemini's
+      // habit of re-sending the full text in the final chunk doesn't double it.
+      if (final) {
+        // Use whichever is longer: accumulated so far, or the incoming final text
+        const finalContent = text.length >= live.accumulated.length ? text : live.accumulated
+        setMessages(prev => prev.map(m =>
+          m.id === live.id ? { ...m, content: finalContent } : m
+        ))
+        liveTranscript.current[role] = null
+      } else {
+        const updated = live.accumulated + text
+        setMessages(prev => prev.map(m =>
+          m.id === live.id ? { ...m, content: updated } : m
+        ))
+        liveTranscript.current[role] = { id: live.id, accumulated: updated }
+      }
     } else {
       // New bubble
       const id = Date.now() + Math.random()
       setMessages(prev => [...prev, { id, role, content: text }])
-      if (!final) liveTranscript.current[role] = id
+      if (!final) liveTranscript.current[role] = { id, accumulated: text }
+      // If final immediately (e.g. user input_transcription), no tracking needed
     }
+  }
+
+  // Close any open live-transcript bubbles on turn end
+  function closeLiveTranscripts() {
+    liveTranscript.current.user = null
+    liveTranscript.current.assistant = null
   }
 
   // ── PCM 24kHz scheduled playback ─────────────────────
@@ -201,9 +235,13 @@ export default function SadanChat({ autoOpen = false }) {
 
     activeSources.current.push(src)
     setSpeaking(true)
+    speakingRef.current = true
     src.onended = () => {
       activeSources.current = activeSources.current.filter(s => s !== src)
-      if (activeSources.current.length === 0) setSpeaking(false)
+      if (activeSources.current.length === 0) {
+        setSpeaking(false)
+        speakingRef.current = false
+      }
     }
   }
 
@@ -212,6 +250,7 @@ export default function SadanChat({ autoOpen = false }) {
     activeSources.current = []
     if (playContextRef.current) nextPlayTime.current = playContextRef.current.currentTime
     setSpeaking(false)
+    speakingRef.current = false
   }
 
   // ── Connect / Disconnect ──────────────────────────────
@@ -227,10 +266,17 @@ export default function SadanChat({ autoOpen = false }) {
 
   const connectVoice = useCallback(async () => {
     if (connected) return
+    wantConnected.current = true
     setError(null)
     try {
-      // Mic stream
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Mic stream — echo cancellation prevents Gemini hearing its own audio output
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      })
       micStreamRef.current = stream
 
       // AudioContext 16kHz for capture
@@ -250,6 +296,8 @@ export default function SadanChat({ autoOpen = false }) {
       processor.connect(micCtx.destination)
       processor.onaudioprocess = (e) => {
         if (wsRef.current?.readyState !== WebSocket.OPEN) return
+        // Don't send mic audio while Gemini is speaking — prevents echo self-triggering
+        if (speakingRef.current) return
         const f32 = e.inputBuffer.getChannelData(0)
         const i16 = new Int16Array(f32.length)
         for (let i = 0; i < f32.length; i++) i16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768))
@@ -272,7 +320,9 @@ export default function SadanChat({ autoOpen = false }) {
             const msg = JSON.parse(e.data)
             if (msg.type === 'interrupted') {
               stopPlayback()
-              liveTranscript.current.assistant = null  // discard partial
+              closeLiveTranscripts()  // discard any open partial bubbles
+            } else if (msg.type === 'turn_complete') {
+              closeLiveTranscripts()  // ensure open bubbles are always closed
             } else if (msg.type === 'transcript') {
               handleTranscript(msg.role, msg.text, msg.final)
             } else if (msg.type === 'whatsapp_sent') {
@@ -281,12 +331,42 @@ export default function SadanChat({ autoOpen = false }) {
                 role: 'system',
                 content: `📱 וואטסאפ נשלח: "${msg.message}"`,
               }])
+            } else if (msg.type === 'toggle_3d') {
+              window.dispatchEvent(new CustomEvent('sadan:toggle3d'))
+            } else if (msg.type === 'map_fly_to') {
+              window.dispatchEvent(new CustomEvent('sadan:map_command', {
+                detail: { action: 'fly_to', lng: msg.lng, lat: msg.lat, zoom: msg.zoom, bearing: msg.bearing, pitch: msg.pitch, duration_ms: msg.duration_ms }
+              }))
+            } else if (msg.type === 'map_zoom') {
+              window.dispatchEvent(new CustomEvent('sadan:map_command', {
+                detail: { action: 'zoom', delta: msg.delta }
+              }))
+            } else if (msg.type === 'map_rotate') {
+              window.dispatchEvent(new CustomEvent('sadan:map_command', {
+                detail: { action: 'rotate', bearing: msg.bearing, pitch: msg.pitch }
+              }))
+            } else if (msg.type === 'map_show_layer') {
+              window.dispatchEvent(new CustomEvent('sadan:show_layer', {
+                detail: { layer: msg.layer, visible: msg.visible }
+              }))
+            } else if (msg.type === 'app_navigate') {
+              window.dispatchEvent(new CustomEvent('sadan:navigate', {
+                detail: { path: msg.path }
+              }))
             }
           } catch (_) {}
         }
       }
 
-      ws.onclose  = () => { setConnected(false); setListening(false); setSpeaking(false) }
+      ws.onclose  = () => {
+        setConnected(false); setListening(false); setSpeaking(false)
+        // Auto-reconnect if user didn't manually disconnect
+        if (wantConnected.current) {
+          reconnectTimer.current = setTimeout(() => {
+            if (wantConnected.current) connectVoice()
+          }, 2000)
+        }
+      }
       ws.onerror  = () => { setError('שגיאת חיבור — בדוק שהשרת פועל'); setConnected(false); setListening(false) }
 
     } catch (e) {
@@ -296,6 +376,8 @@ export default function SadanChat({ autoOpen = false }) {
   }, [connected])
 
   const disconnectVoice = useCallback(() => {
+    wantConnected.current = false          // cancel auto-reconnect intent
+    if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null }
     teardown()
     setConnected(false)
     setListening(false)
@@ -328,6 +410,11 @@ export default function SadanChat({ autoOpen = false }) {
   // Status
   const statusLabel = speaking ? 'סדן מדבר...' : listening ? 'מקשיב...' : 'לחץ מיקרופון'
   const statusDot   = speaking ? 'bg-blue-400 animate-pulse' : listening ? 'bg-green-400 animate-pulse' : 'bg-gray-500'
+
+  // When on a hidden path (login / field-selection / quiz) render nothing visually.
+  // The component stays mounted → all hooks/refs/WS stay alive → context preserved.
+  // Exception: if open=true (triggered via sadanOpen event) — always render.
+  if (!visible && !open) return null
 
   return (
     <>
@@ -369,7 +456,7 @@ export default function SadanChat({ autoOpen = false }) {
                 </div>
               </div>
               <button
-                onClick={() => { disconnectVoice(); setOpen(false) }}
+                onClick={() => setOpen(false)}
                 className="flex items-center gap-1 text-gray-400 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/10 text-xs"
               >
                 <ChevronLeft size={15} />

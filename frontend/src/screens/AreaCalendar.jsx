@@ -18,13 +18,13 @@ function getBooking(fieldId, date) {
 // Popup פרטי הזמנה
 function BookingTooltip({ booking, onClose }) {
   return (
-    <div className="absolute z-50 bg-[#111827] border border-demo-border rounded-xl shadow-2xl p-3 text-xs w-52"
+    <div className="absolute z-50 bg-white border border-gray-200 shadow-xl rounded-xl p-3 text-xs w-52"
       style={{ top: '110%', right: 0 }} dir="rtl">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-white font-bold">{booking.unit}</span>
-        <button onClick={onClose} className="text-gray-500 hover:text-white">✕</button>
+        <span className="text-gray-900 font-bold">{booking.unit}</span>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
       </div>
-      <div className="text-gray-400 space-y-1">
+      <div className="text-gray-600 space-y-1">
         <div><span className="text-gray-500">סוג: </span>{booking.type}</div>
         <div><span className="text-gray-500">שעות: </span>{booking.time}</div>
       </div>
@@ -44,27 +44,27 @@ function CalCell({ fieldId, day, isSelected, onSelect, fieldSelected }) {
   const isFree = !booking
   const isHighlighted = isSelected && isFree
 
-  let cellBg = 'bg-demo-card'
-  let cellText = 'text-gray-600'
-  let cellBorder = 'border-demo-border'
+  let cellBg = 'bg-gray-100'
+  let cellText = 'text-gray-500'
+  let cellBorder = 'border-gray-200'
 
   if (booking) {
-    cellBg = 'bg-red-900/20'
-    cellText = 'text-red-400'
-    cellBorder = 'border-red-500/20'
+    cellBg = 'bg-red-100'
+    cellText = 'text-red-600'
+    cellBorder = 'border-red-200'
   } else if (isHighlighted) {
-    cellBg = 'bg-green-900/20'
-    cellText = 'text-green-400'
-    cellBorder = 'border-green-500/30'
+    cellBg = 'bg-green-100'
+    cellText = 'text-green-700'
+    cellBorder = 'border-green-300'
   } else if (fieldSelected && isFree) {
-    cellBg = 'bg-green-900/10'
+    cellBg = 'bg-green-50'
     cellText = 'text-green-600'
-    cellBorder = 'border-green-800/20'
+    cellBorder = 'border-green-200'
   }
 
   if (day.isWeekend) {
-    cellBg = booking ? cellBg : 'bg-demo-surface/50'
-    cellText = booking ? cellText : 'text-gray-700'
+    cellBg = booking ? cellBg : 'bg-gray-100/80'
+    cellText = booking ? cellText : 'text-gray-600'
   }
 
   return (
@@ -75,9 +75,9 @@ function CalCell({ fieldId, day, isSelected, onSelect, fieldSelected }) {
           onSelect(day.date)
         }}
         className={`w-full h-10 flex items-center justify-center text-xs font-semibold
-          ${booking ? 'cursor-pointer' : 'cursor-pointer hover:bg-white/5'}
+          ${booking ? 'cursor-pointer' : 'cursor-pointer hover:bg-black/5'}
           ${cellText}
-          ${isToday ? 'ring-1 ring-inset ring-demo-gold' : ''}
+          ${isToday ? 'ring-1 ring-inset ring-amber-500' : ''}
         `}
         title={booking ? `${booking.unit} — ${booking.type} ${booking.time}` : 'לחץ לבחירה'}
       >
@@ -131,15 +131,15 @@ export default function AreaCalendar() {
     : null
 
   return (
-    <div className="flex flex-col h-screen bg-demo-bg" dir="rtl">
+    <div className="flex flex-col h-screen bg-gray-50" dir="rtl">
       <Header currentPath="/area" />
 
       <div className="flex flex-1 overflow-hidden gap-0">
 
         {/* פאנל שמאל — שדות */}
-        <div className="w-36 bg-demo-surface border-l border-demo-border flex flex-col">
-          <div className="px-3 py-3 border-b border-demo-border">
-            <div className="text-white font-bold text-sm">שטחי אש</div>
+        <div className="w-36 bg-white border-l border-gray-200 flex flex-col">
+          <div className="px-3 py-3 border-b border-gray-200">
+            <div className="text-gray-900 font-bold text-sm">שטחי אש</div>
             <div className="text-gray-500 text-xs">אזור 251</div>
           </div>
           <div className="flex-1 overflow-y-auto">
@@ -147,15 +147,15 @@ export default function AreaCalendar() {
               <button
                 key={f.id}
                 onClick={() => { setSelectedField(f.id); setSelectedDate(null) }}
-                className={`w-full text-right px-3 py-3 border-b border-demo-border text-xs transition-all
+                className={`w-full text-right px-3 py-3 border-b border-gray-200 text-xs transition-all
                   ${selectedField === f.id
-                    ? 'bg-demo-gold/10 border-r-2 border-r-demo-gold'
-                    : 'hover:bg-demo-card'
+                    ? 'bg-amber-50 border-r-2 border-r-amber-500'
+                    : 'hover:bg-gray-100'
                   }`}
               >
-                <div className={`font-bold ${selectedField === f.id ? 'text-demo-gold' : 'text-white'}`}>
+                <div className={`font-bold ${selectedField === f.id ? 'text-amber-600' : 'text-gray-900'}`}>
                   {f.name}
-                  {f.recommended && <span className="text-demo-gold mr-1">★</span>}
+                  {f.recommended && <span className="text-amber-600 mr-1">★</span>}
                 </div>
                 <div className="text-gray-500 text-[11px]">{f.region}</div>
               </button>
@@ -167,15 +167,15 @@ export default function AreaCalendar() {
         <div className="flex-1 flex flex-col overflow-hidden">
 
           {/* ניווט */}
-          <div className="flex items-center justify-between px-5 py-3 bg-demo-surface border-b border-demo-border flex-shrink-0">
-            <button className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-demo-card transition-colors">
+          <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-gray-200 flex-shrink-0">
+            <button className="text-gray-600 hover:text-gray-900 p-1 rounded-lg hover:bg-gray-100 transition-colors">
               <ChevronRight size={18} />
             </button>
-            <div className="text-white font-bold text-sm flex items-center gap-2">
-              <Calendar size={16} className="text-demo-gold" />
+            <div className="text-gray-900 font-bold text-sm flex items-center gap-2">
+              <Calendar size={16} className="text-amber-600" />
               {MONTH_LABEL}
             </div>
-            <button className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-demo-card transition-colors">
+            <button className="text-gray-600 hover:text-gray-900 p-1 rounded-lg hover:bg-gray-100 transition-colors">
               <ChevronLeft size={18} />
             </button>
           </div>
@@ -185,14 +185,14 @@ export default function AreaCalendar() {
             <table className="w-full border-collapse text-xs table-fixed" style={{ minWidth: '700px' }}>
               <thead>
                 <tr>
-                  <th className="w-24 text-right px-2 py-2 text-gray-500 font-semibold border border-demo-border bg-demo-surface sticky right-0 z-10">
+                  <th className="w-24 text-right px-2 py-2 text-gray-500 font-semibold border border-gray-200 bg-gray-50 sticky right-0 z-10">
                     שטח
                   </th>
                   {DAYS.map(d => (
                     <th key={d.date}
-                      className={`text-center py-2 border border-demo-border font-semibold
-                        ${d.isWeekend ? 'bg-demo-surface text-gray-600' : 'bg-demo-card text-gray-400'}
-                        ${d.date === '2026-05-05' ? 'text-demo-gold' : ''}
+                      className={`text-center py-2 border border-gray-200 font-semibold
+                        ${d.isWeekend ? 'bg-gray-50 text-gray-500' : 'bg-white text-gray-600'}
+                        ${d.date === '2026-05-05' ? 'text-amber-600' : ''}
                       `}
                     >
                       <div className="text-[11px]">{d.dayName}</div>
@@ -204,14 +204,14 @@ export default function AreaCalendar() {
               <tbody>
                 {calendarFields.map(field => (
                   <tr key={field.id}>
-                    <td className={`sticky right-0 z-10 px-2 py-2 border border-demo-border text-right
-                      ${selectedField === field.id ? 'bg-demo-gold/10' : 'bg-demo-surface'}
+                    <td className={`sticky right-0 z-10 px-2 py-2 border border-gray-200 text-right
+                      ${selectedField === field.id ? 'bg-amber-50' : 'bg-white'}
                     `}>
-                      <div className={`font-bold text-xs ${selectedField === field.id ? 'text-demo-gold' : 'text-white'}`}>
+                      <div className={`font-bold text-xs ${selectedField === field.id ? 'text-amber-600' : 'text-gray-900'}`}>
                         {field.name}
-                        {field.recommended && <span className="text-demo-gold mr-1 text-[11px]">★</span>}
+                        {field.recommended && <span className="text-amber-600 mr-1 text-[11px]">★</span>}
                       </div>
-                      <div className="text-gray-600 text-[11px]">{field.region}</div>
+                      <div className="text-gray-500 text-[11px]">{field.region}</div>
                     </td>
                     {DAYS.map(day => (
                       <CalCell
@@ -230,22 +230,22 @@ export default function AreaCalendar() {
           </div>
 
           {/* Footer */}
-          <div className="px-4 py-3 bg-demo-surface border-t border-demo-border flex-shrink-0">
+          <div className="px-4 py-3 bg-white border-t border-gray-200 flex-shrink-0">
 
             {/* קונפליקט */}
             {conflictField && (
-              <div className="mb-3 bg-orange-900/30 border border-orange-500/30 rounded-xl px-4 py-3 text-sm text-orange-300 flex items-start gap-2" dir="rtl">
+              <div className="mb-3 bg-orange-50 border border-orange-300 rounded-xl px-4 py-3 text-sm text-orange-700 flex items-start gap-2" dir="rtl">
                 <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
                 <div>
                   <div className="font-bold">⚠️ {calendarFields.find(f => f.id === conflictField)?.name} תפוס בתאריך הזה.</div>
-                  <div className="text-orange-400 text-xs mt-1">
+                  <div className="text-orange-600 text-xs mt-1">
                     💡 310א פנוי באותו תאריך — מתאים לתרגיל שלך.
                   </div>
                   <div className="flex gap-2 mt-2">
-                    <button className="bg-demo-gold text-black text-xs font-bold px-3 py-1.5 rounded-lg hover:opacity-90">
+                    <button className="bg-amber-500 text-black text-xs font-bold px-3 py-1.5 rounded-lg hover:opacity-90">
                       עבור ל-310א
                     </button>
-                    <button onClick={() => setConflictField(null)} className="text-orange-400 text-xs px-2 py-1.5 hover:text-white">
+                    <button onClick={() => setConflictField(null)} className="text-orange-600 text-xs px-2 py-1.5 hover:text-orange-800">
                       בחר תאריך אחר
                     </button>
                   </div>
@@ -255,11 +255,11 @@ export default function AreaCalendar() {
 
             {/* הצלחה */}
             {requestSent && (
-              <div className="mb-3 bg-green-900/30 border border-green-500/30 rounded-xl px-4 py-3 text-sm text-green-300 flex items-center gap-2">
+              <div className="mb-3 bg-green-50 border border-green-300 rounded-xl px-4 py-3 text-sm text-green-700 flex items-center gap-2">
                 <CheckCircle size={16} />
                 <div>
                   <span className="font-bold">בקשה נשלחה ⏳ </span>
-                  <span className="text-xs text-green-400">
+                  <span className="text-xs text-green-600">
                     {selectedInfo?.name} — {selectedDateFmt} — ממתין לאישור מתא"ם שטחים
                   </span>
                 </div>
@@ -269,15 +269,15 @@ export default function AreaCalendar() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 text-xs text-gray-500">
                 <span className="flex items-center gap-1">
-                  <span className="w-3 h-3 rounded-sm bg-green-900/40 border border-green-500/40 inline-block"/>
+                  <span className="w-3 h-3 rounded-sm bg-green-100 border border-green-300 inline-block"/>
                   פנוי
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="w-3 h-3 rounded-sm bg-red-900/30 border border-red-500/30 inline-block"/>
+                  <span className="w-3 h-3 rounded-sm bg-red-100 border border-red-200 inline-block"/>
                   תפוס
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="w-3 h-3 rounded-sm border border-demo-gold inline-block"/>
+                  <span className="w-3 h-3 rounded-sm border border-amber-500 inline-block"/>
                   היום
                 </span>
               </div>
@@ -285,14 +285,14 @@ export default function AreaCalendar() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => navigate(-1)}
-                  className="px-4 py-2 text-gray-400 hover:text-white text-sm rounded-lg hover:bg-demo-card transition-all"
+                  className="px-4 py-2 text-gray-600 hover:text-gray-900 text-sm rounded-lg hover:bg-gray-100 transition-all"
                 >
                   ← חזרה
                 </button>
                 <button
                   onClick={handleBookRequest}
                   disabled={!selectedDate || requestSent}
-                  className="px-5 py-2 bg-demo-gold text-black font-bold text-sm rounded-xl
+                  className="px-5 py-2 bg-amber-500 text-black font-bold text-sm rounded-xl
                     hover:opacity-90 transition-all shadow-lg disabled:opacity-40 disabled:cursor-not-allowed
                     flex items-center gap-2"
                 >

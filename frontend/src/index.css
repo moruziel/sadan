@@ -35,6 +35,27 @@ body {
   flex-direction: column;
 }
 
+/* ── SadanChat sidebar push ──────────────────────────────── */
+:root { --sadan-scale: 1; }
+
+.sadan-main-content {
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: left center;
+}
+body.sadan-chat-open .sadan-main-content {
+  transform: translateX(350px) scaleX(var(--sadan-scale));
+}
+
+.sadan-panel {
+  transform: translateX(-100%);
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+.sadan-panel.open {
+  transform: translateX(0);
+}
+/* ─────────────────────────────────────────────────────────── */
+
 /* Scrollbar styling */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #f1f1f1; }

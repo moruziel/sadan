@@ -22,14 +22,20 @@ const MAP_STYLE = {
   layers: [{ id: 'osm-tiles', type: 'raster', source: 'osm' }],
 }
 
-// פופאפ HTML — עיצוב כהה
+const POPUP_FONT = "'Heebo','Segoe UI',Arial,sans-serif"
+
 function buildPopupHTML(props) {
+  const isHazard = props.category === 'safety_hazard'
+  const severity = props.severity
+  const titleColor = isHazard
+    ? (severity === 'high' ? '#b91c1c' : '#b45309')
+    : '#111827'
   const lines = (props.popup_body || '').split('\n').map(l =>
-    `<div style="color:#d1d5db;font-size:12px;line-height:1.6">${l}</div>`
+    `<div style="color:#374151;font-size:12px;line-height:1.7;padding:1px 0">${l}</div>`
   ).join('')
   return `
-    <div style="direction:rtl;text-align:right;font-family:sans-serif;max-width:240px">
-      <div style="font-weight:700;font-size:14px;color:#f9fafb;margin-bottom:6px">
+    <div style="direction:rtl;text-align:right;font-family:${POPUP_FONT};max-width:240px">
+      <div style="font-weight:700;font-size:14px;color:${titleColor};margin-bottom:7px;line-height:1.3">
         ${props.popup_title || props.label}
       </div>
       ${lines}
@@ -43,6 +49,9 @@ const CLICKABLE_LAYERS = [
   'neighbor-zone-fill',
   'powerline',
   'axis-line',
+  'assault-area-fill',
+  'sector-boundary-line',
+  'clearance-route-line',
 ]
 
 const SEVERITY_BORDER = { high: '#ef4444', medium: '#f59e0b', low: '#9ca3af', undefined: '#9ca3af' }
@@ -63,6 +72,7 @@ export default function MapView({ layers, activePlanId = null }) {
   const popupRef      = useRef(null)
   const markersRef    = useRef({}) // { category: [marker, ...] }
   const [is3D, setIs3D]           = useState(false)
+  const is3DRef                   = useRef(false)   // stale-closure-safe ref
   const [showCones, setShowCones] = useState(false)
 
   useEffect(() => {
@@ -184,19 +194,49 @@ export default function MapView({ layers, activePlanId = null }) {
         paint: { 'line-color': '#a855f7', 'line-width': 2.5 },
       })
 
-      // ── ציר התקדמות ───────────────────────────────────────
+      // ── ציר התקדמות — מוצג רק לאחר יצירת תרגיל (activePlanId) ───
       map.addLayer({
         id: 'axis-line',
         type: 'line',
         source: 'area-309',
         filter: ['==', ['get', 'category'], 'axis'],
-        layout: { visibility: 'visible' },
+        layout: { visibility: 'none' },  // hidden until a plan is active
         paint: {
           'line-color': '#c6953b',
           'line-width': 3.5,
           'line-dasharray': [5, 3],
           'line-opacity': 0.95,
         },
+      })
+
+      // ── אזורי ירי בהסתערות — פוליגונים אדומים ──────────────
+      map.addLayer({
+        id: 'assault-area-fill', type: 'fill', source: 'area-309',
+        filter: ['all', ['==', ['get', 'category'], 'assault_area'], ['==', ['get', 'plan'], 'plan_1']],
+        layout: { visibility: 'none' },
+        paint: { 'fill-color': '#ef4444', 'fill-opacity': 0.2 },
+      })
+      map.addLayer({
+        id: 'assault-area-border', type: 'line', source: 'area-309',
+        filter: ['all', ['==', ['get', 'category'], 'assault_area'], ['==', ['get', 'plan'], 'plan_1']],
+        layout: { visibility: 'none' },
+        paint: { 'line-color': '#ef4444', 'line-width': 2, 'line-dasharray': [4, 2] },
+      })
+
+      // ── גבולות גזרה לירי — קווים לבנים מקווקווים ───────────
+      map.addLayer({
+        id: 'sector-boundary-line', type: 'line', source: 'area-309',
+        filter: ['all', ['==', ['get', 'category'], 'sector_boundary'], ['==', ['get', 'plan'], 'plan_1']],
+        layout: { visibility: 'none', 'line-cap': 'round' },
+        paint: { 'line-color': '#ffffff', 'line-width': 2.5, 'line-dasharray': [8, 4], 'line-opacity': 0.9 },
+      })
+
+      // ── נתירים — קווים ירוקים ───────────────────────────────
+      map.addLayer({
+        id: 'clearance-route-line', type: 'line', source: 'area-309',
+        filter: ['all', ['==', ['get', 'category'], 'clearance_route'], ['==', ['get', 'plan'], 'plan_1']],
+        layout: { visibility: 'none', 'line-cap': 'round' },
+        paint: { 'line-color': '#22c55e', 'line-width': 3, 'line-dasharray': [2, 4], 'line-opacity': 0.95 },
       })
 
       // ── HTML Markers — emoji אמיתיים ─────────────────────
@@ -316,8 +356,90 @@ export default function MapView({ layers, activePlanId = null }) {
           el.title = p.label || ''
         }
 
-        el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.2)'; el.style.zIndex = '200' })
-        el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)';   el.style.zIndex = '1'   })
+        el.addEventListener('mouseenter', () => { el.style.outline = '2px solid rgba(198,149,59,0.8)'; el.style.zIndex = '200' })
+        el.addEventListener('mouseleave', () => { el.style.outline = ''; el.style.zIndex = '1' })
+        el.addEventListener('click', e => {
+          e.stopPropagation()
+          popup.setLngLat(lngLat).setHTML(buildPopupHTML(p)).addTo(map)
+        })
+
+        const m = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(lngLat)
+        if (!markersByCat[cat]) markersByCat[cat] = []
+        markersByCat[cat].push(m)
+        addMarkers.push({ marker: m, category: cat })
+      })
+
+      // ── נקודות דיווח + עמדות ירי ברתק ─────────────────────
+      AREA_309.geojson.features.forEach(feat => {
+        const p   = feat.properties
+        const cat = p.category
+        if (!['reporting_point', 'sbf_position'].includes(cat)) return
+        if (feat.geometry.type !== 'Point') return
+
+        const lngLat = feat.geometry.coordinates
+        const el = document.createElement('div')
+        el.style.position = 'relative'
+        el.style.zIndex = '2'
+
+        if (cat === 'reporting_point') {
+          el.style.cssText = [
+            'width:26px', 'height:26px',
+            'display:flex', 'align-items:center', 'justify-content:center',
+            'border:2.5px solid #3b82f6',
+            'border-radius:50%',
+            'background:rgba(59,130,246,0.25)',
+            'color:#93c5fd',
+            'font-size:10px',
+            'font-weight:900',
+            'box-shadow:0 0 10px rgba(59,130,246,0.55)',
+            'cursor:pointer',
+            'position:relative',
+            'z-index:2',
+          ].join(';')
+          el.textContent = p.label.replace('נ.ד. ', '')
+          const lbl = document.createElement('div')
+          lbl.style.cssText = [
+            'position:absolute', 'bottom:-15px', 'left:50%',
+            'transform:translateX(-50%)',
+            'color:#93c5fd', 'font-size:9px', 'font-weight:700',
+            'white-space:nowrap',
+            'text-shadow:0 1px 3px #000,0 0 6px #000',
+            'pointer-events:none',
+          ].join(';')
+          lbl.textContent = p.label
+          el.appendChild(lbl)
+
+        } else {
+          // sbf_position
+          el.style.cssText = [
+            'width:28px', 'height:28px',
+            'display:flex', 'align-items:center', 'justify-content:center',
+            'border:2.5px solid #f97316',
+            'border-radius:4px',
+            'background:rgba(249,115,22,0.2)',
+            'color:#fdba74',
+            'font-size:13px',
+            'box-shadow:0 0 10px rgba(249,115,22,0.5)',
+            'cursor:pointer',
+            'position:relative',
+            'z-index:2',
+          ].join(';')
+          el.textContent = '🔫'
+          const lbl = document.createElement('div')
+          lbl.style.cssText = [
+            'position:absolute', 'bottom:-15px', 'left:50%',
+            'transform:translateX(-50%)',
+            'color:#fdba74', 'font-size:9px', 'font-weight:700',
+            'white-space:nowrap',
+            'text-shadow:0 1px 3px #000,0 0 6px #000',
+            'pointer-events:none',
+          ].join(';')
+          lbl.textContent = p.label
+          el.appendChild(lbl)
+        }
+
+        el.addEventListener('mouseenter', () => { el.style.outline = '2px solid rgba(198,149,59,0.8)'; el.style.zIndex = '200' })
+        el.addEventListener('mouseleave', () => { el.style.outline = ''; el.style.zIndex = '2' })
         el.addEventListener('click', e => {
           e.stopPropagation()
           popup.setLngLat(lngLat).setHTML(buildPopupHTML(p)).addTo(map)
@@ -365,8 +487,8 @@ export default function MapView({ layers, activePlanId = null }) {
         el.title = p.label || ''
 
         // hover + z-index elevation (מניעת היעלמות מאחורי שכבות)
-        el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.25)'; el.style.zIndex = '200' })
-        el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)';   el.style.zIndex = '1'   })
+        el.addEventListener('mouseenter', () => { el.style.outline = '2.5px solid rgba(198,149,59,0.9)'; el.style.zIndex = '200' })
+        el.addEventListener('mouseleave', () => { el.style.outline = ''; el.style.zIndex = '1' })
 
         // popup בקליק
         el.addEventListener('click', e => {
@@ -383,6 +505,56 @@ export default function MapView({ layers, activePlanId = null }) {
       })
 
       // הוסף markers לפי הגדרת שכבות
+      // ── נת"ב — נקודות תורפה בטיחותיות ────────────────────
+      AREA_309.geojson.features.forEach(feat => {
+        const p   = feat.properties
+        if (p.category !== 'safety_hazard') return
+        if (feat.geometry.type !== 'Point') return
+
+        const lngLat = feat.geometry.coordinates
+        const isHigh = p.severity === 'high'
+
+        const el = document.createElement('div')
+        el.style.cssText = [
+          'width:32px', 'height:32px',
+          'display:flex', 'align-items:center', 'justify-content:center',
+          'font-size:17px',
+          'background:white',
+          'border-radius:50%',
+          `border:3px solid ${isHigh ? '#ef4444' : '#f59e0b'}`,
+          'cursor:pointer',
+          'box-shadow:0 2px 10px rgba(0,0,0,0.45)',
+          'position:relative',
+          'z-index:1',
+        ].join(';')
+        el.textContent = p.icon || '⚠️'
+        el.title = p.label
+
+        const lbl = document.createElement('div')
+        lbl.style.cssText = [
+          'position:absolute', 'bottom:-14px', 'left:50%',
+          'transform:translateX(-50%)',
+          `color:${isHigh ? '#ef4444' : '#f59e0b'}`,
+          'font-size:9px', 'font-weight:700', 'white-space:nowrap',
+          'text-shadow:0 1px 3px #000,0 0 6px #000',
+          'pointer-events:none',
+        ].join(';')
+        lbl.textContent = p.label
+        el.appendChild(lbl)
+
+        el.addEventListener('mouseenter', () => { el.style.outline = '2px solid rgba(198,149,59,0.8)'; el.style.zIndex = '200' })
+        el.addEventListener('mouseleave', () => { el.style.outline = ''; el.style.zIndex = '1' })
+        el.addEventListener('click', e => {
+          e.stopPropagation()
+          popup.setLngLat(lngLat).setHTML(buildPopupHTML(p)).addTo(map)
+        })
+
+        const m = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(lngLat)
+        if (!markersByCat['safety_hazard']) markersByCat['safety_hazard'] = []
+        markersByCat['safety_hazard'].push(m)
+        addMarkers.push({ marker: m, category: 'safety_hazard' })
+      })
+
       const catToLayer = {
         hazard:          'hazards',
         hazard_zone:     'hazards',
@@ -394,11 +566,21 @@ export default function MapView({ layers, activePlanId = null }) {
         objective:       'forces',
         enemy:           'forces',
         friendly_start:  'forces',
+        safety_hazard:   'natbam',
+        // plan elements — gated on activePlanId
+        reporting_point: null,
+        sbf_position:    null,
       }
+      // קטגוריות שמוצגות רק כשיש תרגיל פעיל
+      const PLAN_ONLY_CATS = new Set(['axis', 'reporting_point', 'sbf_position'])
       addMarkers.forEach(({ marker, category }) => {
+        if (PLAN_ONLY_CATS.has(category)) {
+          if (layers.forces && activePlanId) marker.addTo(map)
+          return
+        }
         const layerKey = catToLayer[category]
         if (layerKey && layers[layerKey]) marker.addTo(map)
-        else if (!layerKey) marker.addTo(map) // ברירת מחדל — תמיד מוצג
+        else if (!layerKey) marker.addTo(map)
       })
 
       markersRef.current = markersByCat
@@ -454,13 +636,19 @@ export default function MapView({ layers, activePlanId = null }) {
     if (!map || !map.isStyleLoaded()) return
     const vis = v => v ? 'visible' : 'none'
     const set = (id, v) => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis(v)) }
+    const planActive = !!activePlanId
 
     // MapLibre layers (פוליגונים + קווים)
     ;['hazard-zone-fill','hazard-zone-border','powerline','powerline-label',
     ].forEach(id => set(id, layers.hazards))
     ;['neighbor-zone-fill','neighbor-zone-border',
     ].forEach(id => set(id, layers.neighbors))
-    ;['axis-line'].forEach(id => set(id, layers.forces))
+    // ציר — רק כאשר תרגיל קיים (activePlanId)
+    ;['axis-line'].forEach(id => set(id, layers.forces && planActive))
+    // אלמנטי תרגיל — רק כאשר תרגיל קיים
+    ;['assault-area-fill','assault-area-border'].forEach(id => set(id, planActive))
+    ;['sector-boundary-line'].forEach(id => set(id, planActive))
+    ;['clearance-route-line'].forEach(id => set(id, planActive))
 
     // HTML Markers — הצג/הסתר
     const m = markersRef.current
@@ -475,8 +663,11 @@ export default function MapView({ layers, activePlanId = null }) {
     toggleMarkers(['infrastructure'],               layers.infrastructure)
     toggleMarkers(['history'],                      layers.history)
     toggleMarkers(['neighbor', 'neighbor_zone'],    layers.neighbors)
-    toggleMarkers(['axis', 'objective', 'enemy', 'friendly_start'], layers.forces)
-  }, [layers.hazards, layers.infrastructure, layers.neighbors, layers.history, layers.forces])
+    toggleMarkers(['safety_hazard'],                layers.natbam)
+    // ציר + נקודות תרגיל — רק עם activePlanId; שאר כוחות תמיד לפי שכבה
+    toggleMarkers(['axis', 'reporting_point', 'sbf_position'], layers.forces && planActive)
+    toggleMarkers(['objective', 'enemy', 'friendly_start'], layers.forces)
+  }, [layers.hazards, layers.infrastructure, layers.neighbors, layers.history, layers.forces, layers.natbam, activePlanId])
 
   // ── Firing cones — toggle + plan change ─────────────────
   useEffect(() => {
@@ -497,7 +688,8 @@ export default function MapView({ layers, activePlanId = null }) {
   function toggle3D() {
     const map = mapObj.current
     if (!map) return
-    const next = !is3D
+    const next = !is3DRef.current
+    is3DRef.current = next
     if (next) {
       map.setTerrain({ source: 'terrain', exaggeration: 2.0 })
       map.easeTo({ pitch: 58, bearing: -15, duration: 900 })
@@ -507,6 +699,42 @@ export default function MapView({ layers, activePlanId = null }) {
     }
     setIs3D(next)
   }
+
+  // ── CustomEvent listeners (voice / text commands) ────────
+  useEffect(() => {
+    const handle3d = () => toggle3D()
+    window.addEventListener('sadan:toggle3d', handle3d)
+
+    const handleCmd = (e) => {
+      const map = mapObj.current
+      if (!map) return
+      const d = e.detail
+      if (d.action === 'fly_to') {
+        map.flyTo({
+          center:   [d.lng, d.lat],
+          zoom:     d.zoom     ?? map.getZoom(),
+          bearing:  d.bearing  ?? map.getBearing(),
+          pitch:    d.pitch    ?? map.getPitch(),
+          duration: d.duration_ms ?? 1500,
+          essential: true,
+        })
+      } else if (d.action === 'zoom') {
+        map.easeTo({ zoom: map.getZoom() + (d.delta ?? 1), duration: 600 })
+      } else if (d.action === 'rotate') {
+        map.easeTo({
+          bearing:  d.bearing,
+          pitch:    d.pitch >= 0 ? d.pitch : map.getPitch(),
+          duration: 800,
+        })
+      }
+    }
+    window.addEventListener('sadan:map_command', handleCmd)
+
+    return () => {
+      window.removeEventListener('sadan:toggle3d', handle3d)
+      window.removeEventListener('sadan:map_command', handleCmd)
+    }
+  }, []) // eslint-disable-line
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 0 }}>
@@ -545,7 +773,12 @@ export default function MapView({ layers, activePlanId = null }) {
         dir="rtl"
       >
         <div className="text-gray-500 font-semibold text-[10px] uppercase tracking-wide mb-1">מקרא</div>
-        <div className="flex items-center gap-2"><span className="w-5 h-0 border-t-2 border-dashed border-[#c6953b] inline-block"/><span className="text-[#c6953b] font-semibold">ציר כוחות</span></div>
+        <div className="flex items-center gap-2"><span className="w-5 h-0 border-t-2 border-dashed border-[#c6953b] inline-block"/><span className="text-[#c6953b] font-semibold">ציר התקדמות</span></div>
+        <div className="flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center border-2 border-[#3b82f6] rounded-full text-[#93c5fd] text-[9px] font-black inline-block">1</span><span className="text-gray-300">נקודת דיווח</span></div>
+        <div className="flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center border border-[#f97316] rounded-sm text-[10px] inline-block">🔫</span><span className="text-gray-300">ע.י. ברתק</span></div>
+        <div className="flex items-center gap-2"><span className="w-4 h-4 rounded-sm border border-[#ef4444] bg-[#ef4444]/20 inline-block"/><span className="text-gray-300">א. הסתערות</span></div>
+        <div className="flex items-center gap-2"><span className="w-5 h-0 border-t-2 border-dashed border-white inline-block"/><span className="text-gray-300">גבול גזרה</span></div>
+        <div className="flex items-center gap-2"><span className="w-5 h-0 border-t-2 border-dotted border-[#22c55e] inline-block"/><span className="text-gray-300">נתיר</span></div>
         <div className="flex items-center gap-2"><span className="text-[#f59e0b] font-black text-base">⊕</span><span className="text-gray-300">מטרה</span></div>
         <div className="flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center border border-[#ef4444] rounded-sm text-[#ef4444] text-[10px] font-black inline-block">✕</span><span className="text-gray-300">בימוי אויב</span></div>
         <div className="flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center border border-[#3b82f6] rounded-sm text-[#3b82f6] text-[10px] font-black inline-block">★</span><span className="text-gray-300">חפ"ק / רפואה</span></div>
@@ -565,17 +798,19 @@ export default function MapView({ layers, activePlanId = null }) {
           50%       { box-shadow: 0 0 26px rgba(245,158,11,0.9); }
         }
         .sadan-popup .maplibregl-popup-content {
-          background: #111827;
-          border: 1px solid rgba(198,149,59,0.3);
+          background: rgba(255,255,255,0.92);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid rgba(0,0,0,0.10);
           border-radius: 12px;
           padding: 12px 14px;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.18);
         }
-        .sadan-popup .maplibregl-popup-tip { border-top-color: #111827; }
+        .sadan-popup .maplibregl-popup-tip { border-top-color: rgba(255,255,255,0.92); }
         .sadan-popup .maplibregl-popup-close-button {
-          color: #9ca3af; font-size: 16px; padding: 4px 8px;
+          color: #6b7280; font-size: 16px; padding: 4px 8px;
         }
-        .sadan-popup .maplibregl-popup-close-button:hover { color: #fff; }
+        .sadan-popup .maplibregl-popup-close-button:hover { color: #111827; }
       `}</style>
     </div>
   )

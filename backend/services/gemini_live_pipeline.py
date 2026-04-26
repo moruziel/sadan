@@ -30,21 +30,141 @@ OUTPUT_SAMPLE_RATE = 24000  # Gemini returns 24 kHz PCM
 
 SADAN_SYSTEM_PROMPT = """\
 אתה סדן, סוכן בינה מלאכותית של מערך האימונים בצה"ל.
-אתה מתקשר עם רז לאישור תרגיל מחלקה בשטח אימונים 309ה.
+אתה מסייע לתכנון ובחינת שטחי אימון, ויכול לשלוט במפה ובאפליקציה.
 
 כללים:
 - דבר עברית בלבד.
-- תשובות קצרות — מקסימום 15 מילים.
+- תשובות קצרות וממוקדות — מקסימום 20 מילים.
 - שאלה אחת בכל פעם.
-- קצב דיבור ברור ונינוח.
-
-זרימת השיחה:
-1. וודא שזה רז: "האם אני מדבר עם רז?"
-2. רז אישר: "תרגיל מחלקה ב-309ה ב-5 במאי. שלחתי פרטים בוואטסאפ — קיבלת?"
-3. קיבל: "תרגיל רטוב, 30 לוחמים, חבלה ודימוי אויב. מאשר?"
-4. אישר: "תודה רז. מתועד במערכת. יום טוב."
-5. שאלות — תשובה קצרה בלבד, הפרטים המלאים בוואטסאפ.\
+- כשמציג אלמנט על המפה — השתמש ב-map_show_element.
+- כשמסביר מגבלה — ציין את הסיבה בשורה אחת.
+\
 """
+
+# ── Field element lookup table ─────────────────────────────────────────────────
+# All coordinates and metadata for 309h training area elements.
+# map_show_element tool uses this dict to fly the map and expose layer info.
+_FIELD_ELEMENTS: dict = {
+    "center": {
+        "lng": 35.245, "lat": 31.820, "zoom": 12,
+        "name": "מרכז שטח 309ה",
+        "layer": None,
+        "info": "מרכז שטח האש 309ה",
+        "constraints": None,
+    },
+    "helipad": {
+        "lng": 35.218, "lat": 31.838, "zoom": 15,
+        "name": "נחיתת מסוקים",
+        "layer": "infrastructure",
+        "info": "נחיתת מסוקים — מיקום דרום-מערב בלבד",
+        "constraints": "מזרחית אסור — קו מתח 161KV חוצה את האזור",
+    },
+    "powerline": {
+        "lng": 35.245, "lat": 31.844, "zoom": 13,
+        "name": "קו חשמל 161KV",
+        "layer": "hazards",
+        "info": "קו חשמל 161KV — מפגע קריטי",
+        "constraints": "100מ' מינימום מהקו, ירי אסור ברדיוס 50מ'",
+    },
+    "nature_reserve": {
+        "lng": 35.271, "lat": 31.821, "zoom": 14,
+        "name": "שמורת נחל קדרון",
+        "layer": "hazards",
+        "info": "שמורת נחל קדרון — שמורת טבע מוגנת",
+        "constraints": "אין כניסה ל-200מ' מגדר הצפון-מזרחי",
+    },
+    "antiquities": {
+        "lng": 35.223, "lat": 31.810, "zoom": 15,
+        "name": "תל עתיקות",
+        "layer": "hazards",
+        "info": "תל עתיקות — אתר ארכיאולוגי מוגן",
+        "constraints": "אין כלי רכב כבדים, אין ירי ממוקד לאזור",
+    },
+    "assembly_area": {
+        "lng": 35.233, "lat": 31.832, "zoom": 15,
+        "name": "אזור כינוס",
+        "layer": "infrastructure",
+        "info": "אזור כינוס — נקודת התארגנות ראשית",
+        "constraints": None,
+    },
+    "admin_building": {
+        "lng": 35.240, "lat": 31.826, "zoom": 15,
+        "name": "מבנה מנהלה",
+        "layer": "infrastructure",
+        "info": "מבנה מנהלה — ניהול ותיאום שטח",
+        "constraints": None,
+    },
+    "water_point": {
+        "lng": 35.257, "lat": 31.814, "zoom": 15,
+        "name": "נקודת מים",
+        "layer": "infrastructure",
+        "info": "נקודת מים — אספקת מים לכוחות",
+        "constraints": None,
+    },
+    "target_a": {
+        "lng": 35.228, "lat": 31.837, "zoom": 14,
+        "name": "יעד א' — בטונדה מערבית",
+        "layer": None,
+        "info": "יעד א' — בטונדה מערבית",
+        "constraints": None,
+    },
+    "target_b": {
+        "lng": 35.240, "lat": 31.842, "zoom": 14,
+        "name": "יעד ב' — בטונדה מרכזית",
+        "layer": None,
+        "info": "יעד ב' — בטונדה מרכזית, יעד עיקרי",
+        "constraints": None,
+    },
+    "target_c": {
+        "lng": 35.252, "lat": 31.836, "zoom": 14,
+        "name": "יעד ג' — עמדה מזרחית",
+        "layer": None,
+        "info": "יעד ג' — עמדה מזרחית",
+        "constraints": None,
+    },
+    "battalion_hq": {
+        "lng": 35.237, "lat": 31.797, "zoom": 15,
+        "name": "חפ\"ק גדוד 51",
+        "layer": "forces",
+        "info": "חפ\"ק גדוד 51 — מטה הגדוד",
+        "constraints": None,
+    },
+    "medical_post": {
+        "lng": 35.232, "lat": 31.795, "zoom": 15,
+        "name": "תחנה רפואית",
+        "layer": "forces",
+        "info": "תחנה רפואית — עזרה ראשונה לכוחות",
+        "constraints": None,
+    },
+    "enemy_center": {
+        "lng": 35.236, "lat": 31.831, "zoom": 14,
+        "name": "אויב מרכז (בימוי)",
+        "layer": "forces",
+        "info": "אויב מרכז — כוח בימוי מרכזי",
+        "constraints": None,
+    },
+    "enemy_east": {
+        "lng": 35.250, "lat": 31.828, "zoom": 14,
+        "name": "אויב מזרח (בימוי)",
+        "layer": "forces",
+        "info": "אויב מזרח — כוח בימוי מזרחי",
+        "constraints": None,
+    },
+    "battalion_202": {
+        "lng": 35.235, "lat": 31.866, "zoom": 13,
+        "name": "גדוד 202 (שכן)",
+        "layer": "neighbors",
+        "info": "גדוד 202 — כוח שכן בצפון",
+        "constraints": None,
+    },
+    "artillery_411": {
+        "lng": 35.301, "lat": 31.806, "zoom": 13,
+        "name": "תותחנים 411 (שכן)",
+        "layer": "neighbors",
+        "info": "גדוד תותחנים 411 — כוח שכן במזרח",
+        "constraints": None,
+    },
+}
 
 
 class GeminiLivePipeline:
@@ -64,7 +184,7 @@ class GeminiLivePipeline:
 
         client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION)
 
-        # send_whatsapp tool — SADAN can send a WhatsApp message to the user
+        # send_whatsapp tool
         send_wa_tool = types.Tool(
             function_declarations=[
                 types.FunctionDeclaration(
@@ -87,23 +207,183 @@ class GeminiLivePipeline:
             ]
         )
 
+        # toggle_3d tool
+        toggle_3d_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="toggle_3d",
+                    description="הצג/הסתר תצוגת תלת מימד עם הגבהת שטח. הפעל כשמבקשים תלת מימד.",
+                    parameters=types.Schema(type=types.Type.OBJECT, properties={}),
+                )
+            ]
+        )
+
+        # map_fly_to — fly to coordinates
+        map_fly_to_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="map_fly_to",
+                    description=(
+                        "הטס את המפה למיקום ספציפי. "
+                        "השתמש להצגת אלמנטים: מנחת מסוקים, מפגעים, יעדים, תשתיות וכו'. "
+                        "הפעל לפני הסבר על אלמנט."
+                    ),
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "lng":         types.Schema(type=types.Type.NUMBER,  description="קו אורך"),
+                            "lat":         types.Schema(type=types.Type.NUMBER,  description="קו רוחב"),
+                            "zoom":        types.Schema(type=types.Type.NUMBER,  description="זום 8–18, ברירת מחדל 14"),
+                            "bearing":     types.Schema(type=types.Type.NUMBER,  description="כיוון המפה: 0=צפון, 90=מזרח"),
+                            "pitch":       types.Schema(type=types.Type.NUMBER,  description="הטיית המפה 0–60"),
+                            "duration_ms": types.Schema(type=types.Type.INTEGER, description="משך אנימציה במילישניות, ברירת מחדל 1500"),
+                        },
+                        required=["lng", "lat"],
+                    ),
+                )
+            ]
+        )
+
+        # map_zoom — zoom in/out
+        map_zoom_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="map_zoom",
+                    description="התקרב/התרחק במפה. delta חיובי=התקרב, שלילי=התרחק.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "delta": types.Schema(type=types.Type.NUMBER, description="שינוי זום, לדוגמה 2=התקרב 2 שלבים"),
+                        },
+                        required=["delta"],
+                    ),
+                )
+            ]
+        )
+
+        # map_rotate — rotate/tilt
+        map_rotate_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="map_rotate",
+                    description="סובב את המפה לזווית מסוימת, או שנה הטיה.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "bearing": types.Schema(type=types.Type.NUMBER, description="כיוון 0–360: 0=צפון, 90=מזרח, 180=דרום, 270=מערב"),
+                            "pitch":   types.Schema(type=types.Type.NUMBER, description="הטיה 0–60 מעלות (אופציונלי)"),
+                        },
+                        required=["bearing"],
+                    ),
+                )
+            ]
+        )
+
+        # map_show_layer — toggle information layer
+        map_show_layer_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="map_show_layer",
+                    description=(
+                        "הצג או הסתר שכבת מידע במפה. "
+                        "שכבות: forces=כוחות, hazards=מפגעים, infrastructure=תשתיות, neighbors=שכנים, history=היסטוריה."
+                    ),
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "layer":   types.Schema(type=types.Type.STRING,  description="שם השכבה: forces/hazards/infrastructure/neighbors/history"),
+                            "visible": types.Schema(type=types.Type.BOOLEAN, description="true=הצג, false=הסתר"),
+                        },
+                        required=["layer", "visible"],
+                    ),
+                )
+            ]
+        )
+
+        # app_navigate — navigate between app pages
+        app_navigate_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="app_navigate",
+                    description=(
+                        "נווט לדף אחר באפליקציה. הפעל כשהמשתמש מבקש לעבור לשלב אחר. "
+                        "דפים: area=מפה, questionnaire=שאלון, plans=מתווים, "
+                        "exercise=תיק-תרגיל, quiz=בוחן, approvals=אישורים, field-selection=בחירת-שטח."
+                    ),
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "page": types.Schema(
+                                type=types.Type.STRING,
+                                description="שם הדף: area/questionnaire/plans/exercise/quiz/approvals/field-selection",
+                            ),
+                        },
+                        required=["page"],
+                    ),
+                )
+            ]
+        )
+
+        # map_show_element — fly to a named field element and reveal its layer
+        map_show_element_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="map_show_element",
+                    description=(
+                        "הצג אלמנט ספציפי על מפת שטח 309ה — המפה תטוס אליו ותציג את שכבת המידע. "
+                        "השתמש בכלי זה כשמשתמש שואל 'איפה...' או 'תראה לי...' לגבי אלמנט בשטח. "
+                        "ערכי element אפשריים: "
+                        "center, helipad, powerline, nature_reserve, antiquities, "
+                        "assembly_area, admin_building, water_point, "
+                        "target_a, target_b, target_c, "
+                        "battalion_hq, medical_post, enemy_center, enemy_east, "
+                        "battalion_202, artillery_411."
+                    ),
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "element": types.Schema(
+                                type=types.Type.STRING,
+                                description=(
+                                    "מפתח האלמנט. אחד מ: "
+                                    "center / helipad / powerline / nature_reserve / antiquities / "
+                                    "assembly_area / admin_building / water_point / "
+                                    "target_a / target_b / target_c / "
+                                    "battalion_hq / medical_post / enemy_center / enemy_east / "
+                                    "battalion_202 / artillery_411"
+                                ),
+                            ),
+                        },
+                        required=["element"],
+                    ),
+                )
+            ]
+        )
+
         config = types.LiveConnectConfig(
             response_modalities=[types.Modality.AUDIO],
             system_instruction=types.Content(
                 parts=[types.Part(text=self.system_prompt)]
             ),
-            # Charon: neutral, professional voice — works well for Hebrew
             speech_config=types.SpeechConfig(
+                language_code="he",   # ISO 639-1 — force Hebrew speech synthesis
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
                         voice_name="Charon"
                     )
                 )
             ),
-            # Transcription for both sides — sent as JSON to the browser
-            output_audio_transcription=types.AudioTranscriptionConfig(),
-            input_audio_transcription=types.AudioTranscriptionConfig(),
-            tools=[send_wa_tool],
+            output_audio_transcription=types.AudioTranscriptionConfig(
+                language_codes=["he-IL"],  # BCP-47 — force Hebrew transcription
+            ),
+            input_audio_transcription=types.AudioTranscriptionConfig(
+                language_codes=["he-IL"],  # BCP-47 — force Hebrew input recognition
+            ),
+            tools=[
+                send_wa_tool, toggle_3d_tool,
+                map_fly_to_tool, map_zoom_tool, map_rotate_tool, map_show_layer_tool,
+                app_navigate_tool, map_show_element_tool,
+            ],
         )
 
         logger.info(f"[Gemini Live] Connecting — model={MODEL}")
@@ -175,10 +455,140 @@ class GeminiLivePipeline:
                                         )
                                     ]
                                 )
+                            elif fc.name == "toggle_3d":
+                                await self.websocket.send_text(
+                                    json.dumps({"type": "toggle_3d"}, ensure_ascii=False)
+                                )
+                                await session.send_tool_response(function_responses=[
+                                    types.FunctionResponse(name="toggle_3d", id=fc.id, response={"result": "ok"})
+                                ])
+
+                            elif fc.name == "map_fly_to":
+                                args = fc.args or {}
+                                await self.websocket.send_text(json.dumps({
+                                    "type": "map_fly_to",
+                                    "lng":         float(args.get("lng", 35.245)),
+                                    "lat":         float(args.get("lat", 31.820)),
+                                    "zoom":        float(args.get("zoom", 14)),
+                                    "bearing":     float(args.get("bearing", 0)),
+                                    "pitch":       float(args.get("pitch", 0)),
+                                    "duration_ms": int(args.get("duration_ms", 1500)),
+                                }, ensure_ascii=False))
+                                await session.send_tool_response(function_responses=[
+                                    types.FunctionResponse(name="map_fly_to", id=fc.id, response={"result": "ok"})
+                                ])
+
+                            elif fc.name == "map_zoom":
+                                args = fc.args or {}
+                                await self.websocket.send_text(json.dumps({
+                                    "type": "map_zoom",
+                                    "delta": float(args.get("delta", 1)),
+                                }, ensure_ascii=False))
+                                await session.send_tool_response(function_responses=[
+                                    types.FunctionResponse(name="map_zoom", id=fc.id, response={"result": "ok"})
+                                ])
+
+                            elif fc.name == "map_rotate":
+                                args = fc.args or {}
+                                await self.websocket.send_text(json.dumps({
+                                    "type": "map_rotate",
+                                    "bearing": float(args.get("bearing", 0)),
+                                    "pitch":   float(args.get("pitch", -1)),  # -1 = keep current
+                                }, ensure_ascii=False))
+                                await session.send_tool_response(function_responses=[
+                                    types.FunctionResponse(name="map_rotate", id=fc.id, response={"result": "ok"})
+                                ])
+
+                            elif fc.name == "map_show_layer":
+                                args = fc.args or {}
+                                await self.websocket.send_text(json.dumps({
+                                    "type":    "map_show_layer",
+                                    "layer":   str(args.get("layer", "")),
+                                    "visible": bool(args.get("visible", True)),
+                                }, ensure_ascii=False))
+                                await session.send_tool_response(function_responses=[
+                                    types.FunctionResponse(name="map_show_layer", id=fc.id, response={"result": "ok"})
+                                ])
+
+                            elif fc.name == "app_navigate":
+                                _PAGE_MAP = {
+                                    "area":            "/area",
+                                    "field-selection": "/field-selection",
+                                    "questionnaire":   "/questionnaire",
+                                    "plans":           "/plans",
+                                    "exercise":        "/exercise",
+                                    "quiz":            "/quiz",
+                                    "approvals":       "/approvals",
+                                }
+                                page = str((fc.args or {}).get("page", ""))
+                                path = _PAGE_MAP.get(page, f"/{page}")
+                                await self.websocket.send_text(json.dumps({
+                                    "type": "app_navigate",
+                                    "path": path,
+                                }, ensure_ascii=False))
+                                await session.send_tool_response(function_responses=[
+                                    types.FunctionResponse(name="app_navigate", id=fc.id, response={"result": "ok"})
+                                ])
+
+                            elif fc.name == "map_show_element":
+                                element_key = str((fc.args or {}).get("element", ""))
+                                el = _FIELD_ELEMENTS.get(element_key)
+                                if el:
+                                    # Fly map to element
+                                    await self.websocket.send_text(json.dumps({
+                                        "type":        "map_fly_to",
+                                        "lng":         el["lng"],
+                                        "lat":         el["lat"],
+                                        "zoom":        el.get("zoom", 14),
+                                        "bearing":     0,
+                                        "pitch":       0,
+                                        "duration_ms": 1500,
+                                    }, ensure_ascii=False))
+                                    # Show relevant layer if defined
+                                    if el.get("layer"):
+                                        await self.websocket.send_text(json.dumps({
+                                            "type":    "map_show_layer",
+                                            "layer":   el["layer"],
+                                            "visible": True,
+                                        }, ensure_ascii=False))
+                                    # Build info string for Gemini to speak
+                                    info_text = el["info"]
+                                    if el.get("constraints"):
+                                        info_text += f". {el['constraints']}"
+                                    await session.send_tool_response(function_responses=[
+                                        types.FunctionResponse(
+                                            name="map_show_element",
+                                            id=fc.id,
+                                            response={"name": el["name"], "info": info_text},
+                                        )
+                                    ])
+                                    logger.info(f"[Gemini Live] map_show_element: {element_key} → {el['name']}")
+                                else:
+                                    logger.warning(f"[Gemini Live] map_show_element: unknown key '{element_key}'")
+                                    await session.send_tool_response(function_responses=[
+                                        types.FunctionResponse(
+                                            name="map_show_element",
+                                            id=fc.id,
+                                            response={"error": f"element '{element_key}' not found"},
+                                        )
+                                    ])
 
                     if not response.server_content:
                         continue
                     sc = response.server_content
+
+                    # ── DEBUG: log every non-empty server_content event ──────
+                    _dbg_parts = []
+                    if sc.model_turn:       _dbg_parts.append(f"audio_parts={len(sc.model_turn.parts)}")
+                    if sc.output_transcription and sc.output_transcription.text:
+                        _dbg_parts.append(f"out_transcript={repr(sc.output_transcription.text[:60])}")
+                    if sc.input_transcription and sc.input_transcription.text:
+                        _dbg_parts.append(f"in_transcript={repr(sc.input_transcription.text[:60])}")
+                    if sc.turn_complete:    _dbg_parts.append("turn_complete=True")
+                    if sc.interrupted:      _dbg_parts.append("interrupted=True")
+                    if _dbg_parts:
+                        logger.info(f"[Gemini SC] {' | '.join(_dbg_parts)}")
+                    # ────────────────────────────────────────────────────────
 
                     # Audio chunks
                     if sc.model_turn:
@@ -190,21 +600,25 @@ class GeminiLivePipeline:
 
                     # SADAN transcript (model output)
                     if sc.output_transcription and sc.output_transcription.text:
-                        await self.websocket.send_text(json.dumps({
+                        payload = {
                             "type": "transcript",
                             "role": "assistant",
                             "text": sc.output_transcription.text,
                             "final": bool(sc.turn_complete),
-                        }, ensure_ascii=False))
+                        }
+                        logger.info(f"[Gemini TX→browser] assistant transcript final={payload['final']} text={repr(payload['text'][:60])}")
+                        await self.websocket.send_text(json.dumps(payload, ensure_ascii=False))
 
                     # User transcript (input)
                     if sc.input_transcription and sc.input_transcription.text:
-                        await self.websocket.send_text(json.dumps({
+                        payload = {
                             "type": "transcript",
                             "role": "user",
                             "text": sc.input_transcription.text,
                             "final": True,
-                        }, ensure_ascii=False))
+                        }
+                        logger.info(f"[Gemini TX→browser] user transcript text={repr(payload['text'][:60])}")
+                        await self.websocket.send_text(json.dumps(payload, ensure_ascii=False))
 
                     if sc.interrupted:
                         logger.info("[Gemini Live] ↩ User interrupted — barge-in")
@@ -212,6 +626,8 @@ class GeminiLivePipeline:
 
                     if sc.turn_complete:
                         logger.info("[Gemini Live] ✓ Turn complete")
+                        # Signal frontend to close any open live-transcript bubbles
+                        await self.websocket.send_text('{"type":"turn_complete"}')
 
         except Exception as e:
             logger.warning(f"[Gemini Live] Receive error: {e}")
@@ -339,9 +755,11 @@ class GeminiVonagePipeline:
         )
 
         logger.info(f"[Gemini Vonage] Connecting — script={self.script_id}")
+        print(f"[DIAG] GeminiVonagePipeline.run() start — script={self.script_id}", flush=True)
         try:
             async with client.aio.live.connect(model=MODEL, config=config) as session:
                 logger.info("[Gemini Vonage] ✅ Session open")
+                print("[DIAG] Gemini session opened", flush=True)
 
                 # Trigger Gemini to speak the opening greeting immediately
                 await session.send_client_content(
@@ -351,9 +769,11 @@ class GeminiVonagePipeline:
                     ),
                     turn_complete=True,
                 )
+                print("[DIAG] send_client_content sent", flush=True)
 
                 send_task = asyncio.create_task(self._send_audio(session))
                 recv_task = asyncio.create_task(self._receive_audio(session))
+                print("[DIAG] audio tasks started", flush=True)
 
                 done, pending = await asyncio.wait(
                     [send_task, recv_task],
@@ -368,14 +788,18 @@ class GeminiVonagePipeline:
 
         except Exception as e:
             logger.error(f"[Gemini Vonage] Session error: {e}", exc_info=True)
+            print(f"[DIAG] Session ERROR: {type(e).__name__}: {e}", flush=True)
         finally:
             logger.info(f"[Gemini Vonage] Session closed — script={self.script_id}")
+            print(f"[DIAG] Session closed — script={self.script_id}", flush=True)
 
     async def _send_audio(self, session):
         """Vonage → resample 24 kHz→16 kHz → Gemini."""
         from fastapi import WebSocketDisconnect
         from google.genai import types
 
+        print("[DIAG] _send_audio started", flush=True)
+        chunks_sent = 0
         try:
             while True:
                 msg = await self.websocket.receive()
@@ -387,20 +811,30 @@ class GeminiVonagePipeline:
                             mime_type=f"audio/pcm;rate={GEMINI_INPUT_RATE}",
                         )
                     )
+                    chunks_sent += 1
+                    if chunks_sent <= 3 or chunks_sent % 50 == 0:
+                        print(f"[DIAG] sent chunk #{chunks_sent} ({len(msg['bytes'])}b)", flush=True)
                 elif "text" in msg:
                     logger.debug(f"[Gemini Vonage] Vonage control: {msg['text'][:60]}")
         except WebSocketDisconnect:
             logger.info("[Gemini Vonage] Call disconnected (Vonage)")
+            print(f"[DIAG] _send_audio: Vonage disconnected after {chunks_sent} chunks", flush=True)
         except Exception as e:
             logger.warning(f"[Gemini Vonage] Send error: {e}")
+            print(f"[DIAG] _send_audio ERROR after {chunks_sent} chunks: {type(e).__name__}: {e}", flush=True)
 
     async def _receive_audio(self, session):
         """Gemini (24 kHz) → Vonage in 20 ms chunks.
         Also handles the send_whatsapp tool call."""
         from google.genai import types
+        print("[DIAG] _receive_audio started", flush=True)
+        responses_received = 0
         try:
             while True:
                 async for response in session.receive():
+                    responses_received += 1
+                    if responses_received <= 5:
+                        print(f"[DIAG] recv response #{responses_received}: tool_call={bool(response.tool_call)} server_content={bool(response.server_content)}", flush=True)
 
                     # ── Tool call: send_whatsapp ───────────────
                     if response.tool_call:
@@ -443,6 +877,7 @@ class GeminiVonagePipeline:
 
         except Exception as e:
             logger.warning(f"[Gemini Vonage] Receive error: {e}")
+            print(f"[DIAG] _receive_audio ERROR after {responses_received} responses: {type(e).__name__}: {e}", flush=True)
 
     async def _do_send_whatsapp(self):
         """Send exercise details via WhatsApp server (localhost:3001/send)."""

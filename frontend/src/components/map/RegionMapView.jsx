@@ -2,7 +2,7 @@
  * RegionMapView — מפת גזרה עם 5 שטחי אש
  * מציגה את הגולן (אזור 251) עם שטחים clickable
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { REGION_251 } from '../../data/region251.js'
@@ -38,11 +38,88 @@ function buildPopupHTML(field) {
   `
 }
 
-export default function RegionMapView({ onFieldSelect, selectedFieldId, mode = 'region' }) {
-  const containerRef = useRef(null)
-  const mapObj       = useRef(null)
-  const popupRef     = useRef(null)
-  const markersRef   = useRef([])
+const DEFAULT_LAYERS = { forces: true, hazards: true, infrastructure: true, neighbors: true, history: true }
+
+export default function RegionMapView({ onFieldSelect, selectedFieldId, mode = 'region', layers = DEFAULT_LAYERS }) {
+  const containerRef   = useRef(null)
+  const mapObj         = useRef(null)
+  const popupRef       = useRef(null)
+  const markersRef     = useRef({ forces: [], hazards: [], infrastructure: [] })
+  const [is3D, setIs3D] = useState(false)
+  const is3DRef         = useRef(false)
+
+  // ── Fly to selected field ────────────────────────────────
+  useEffect(() => {
+    const map = mapObj.current
+    if (!map || !selectedFieldId) return
+    const field = REGION_251.displayFields.find(f => f.id === selectedFieldId)
+    if (!field) return
+    map.flyTo({ center: field.center, zoom: 13, speed: 1.4, curve: 1.2, duration: 1200 })
+  }, [selectedFieldId])
+
+  // ── Layer toggles ────────────────────────────────────────
+  useEffect(() => {
+    const map = mapObj.current
+    if (!map) return
+    const m = markersRef.current
+    const show = (cat, visible) => (m[cat] || []).forEach(marker => {
+      if (visible) marker.addTo(map); else marker.remove()
+    })
+    show('forces',         layers.forces)
+    show('hazards',        layers.hazards)
+    show('infrastructure', layers.infrastructure)
+  }, [layers.forces, layers.hazards, layers.infrastructure])
+
+  function toggle3D() {
+    const map = mapObj.current
+    if (!map) return
+    const next = !is3DRef.current
+    is3DRef.current = next
+    if (next) {
+      map.setTerrain({ source: 'terrain', exaggeration: 2.0 })
+      map.easeTo({ pitch: 55, bearing: -12, duration: 900 })
+    } else {
+      map.setTerrain(null)
+      map.easeTo({ pitch: 0, bearing: 0, duration: 900 })
+    }
+    setIs3D(next)
+  }
+
+  // ── CustomEvent listeners (voice / text commands) ────────
+  useEffect(() => {
+    const handle3d = () => toggle3D()
+    window.addEventListener('sadan:toggle3d', handle3d)
+
+    const handleCmd = (e) => {
+      const map = mapObj.current
+      if (!map) return
+      const d = e.detail
+      if (d.action === 'fly_to') {
+        map.flyTo({
+          center:   [d.lng, d.lat],
+          zoom:     d.zoom     ?? map.getZoom(),
+          bearing:  d.bearing  ?? map.getBearing(),
+          pitch:    d.pitch    ?? map.getPitch(),
+          duration: d.duration_ms ?? 1500,
+          essential: true,
+        })
+      } else if (d.action === 'zoom') {
+        map.easeTo({ zoom: map.getZoom() + (d.delta ?? 1), duration: 600 })
+      } else if (d.action === 'rotate') {
+        map.easeTo({
+          bearing:  d.bearing,
+          pitch:    d.pitch >= 0 ? d.pitch : map.getPitch(),
+          duration: 800,
+        })
+      }
+    }
+    window.addEventListener('sadan:map_command', handleCmd)
+
+    return () => {
+      window.removeEventListener('sadan:toggle3d', handle3d)
+      window.removeEventListener('sadan:map_command', handleCmd)
+    }
+  }, []) // eslint-disable-line
 
   const zoom   = mode === 'free' ? 7.5 : REGION_251.zoom
   const center = mode === 'free' ? [35.0, 31.5] : REGION_251.center
@@ -143,8 +220,7 @@ export default function RegionMapView({ onFieldSelect, selectedFieldId, mode = '
           },
         })
 
-        // מרקר
-        const el = document.createElement('div')
+        // ── מרקר כוחות (ציון + זמינות) ──────────────────────
         const color = isSelected ? '#c6953b'
           : mode === 'urgent' && isAvail ? '#22c55e'
           : mode === 'urgent' ? '#ef4444'
@@ -152,62 +228,105 @@ export default function RegionMapView({ onFieldSelect, selectedFieldId, mode = '
           : isAvail ? '#3b82f6'
           : '#6b7280'
 
-        el.style.cssText = [
-          'display:flex', 'flex-direction:column', 'align-items:center', 'gap:3px',
-          'cursor:pointer',
-        ].join(';')
+        const el = document.createElement('div')
+        el.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer'
 
         const dot = document.createElement('div')
         dot.style.cssText = [
-          'width:44px', 'height:44px',
-          'border-radius:12px',
-          `background:${color}22`,
-          `border:2.5px solid ${color}`,
-          'display:flex', 'align-items:center', 'justify-content:center',
-          'flex-direction:column',
+          'width:44px', 'height:44px', 'border-radius:12px',
+          `background:${color}22`, `border:2.5px solid ${color}`,
+          'display:flex', 'align-items:center', 'justify-content:center', 'flex-direction:column',
           `box-shadow:0 0 ${isRecommend ? '18px' : '10px'} ${color}55`,
-          'transition:all 0.2s',
+          'transition:box-shadow 0.2s',
           isRecommend ? 'animation:regionPulse 2.5s ease-in-out infinite' : '',
         ].join(';')
 
-        const score = document.createElement('div')
-        score.style.cssText = `color:${color};font-size:11px;font-weight:900;line-height:1`
-        score.textContent = field.score
+        const scoreEl = document.createElement('div')
+        scoreEl.style.cssText = `color:${color};font-size:11px;font-weight:900;line-height:1`
+        scoreEl.textContent = field.score
+        const availEl = document.createElement('div')
+        availEl.style.cssText = 'color:#9ca3af;font-size:8px;font-weight:700;line-height:1'
+        availEl.textContent = isAvail ? '✓' : '✗'
+        dot.appendChild(scoreEl)
+        dot.appendChild(availEl)
 
-        const label = document.createElement('div')
-        label.style.cssText = `color:#9ca3af;font-size:8px;font-weight:700;line-height:1`
-        label.textContent = isAvail ? '✓' : '✗'
-        dot.appendChild(score)
-        dot.appendChild(label)
-
-        const name = document.createElement('div')
-        name.style.cssText = [
-          `color:${color}`,
-          'font-size:10px',
-          'font-weight:700',
-          'white-space:nowrap',
+        const nameEl = document.createElement('div')
+        nameEl.style.cssText = [
+          `color:${color}`, 'font-size:10px', 'font-weight:700', 'white-space:nowrap',
           'text-shadow:0 1px 4px #000,0 0 8px #000',
-          'background:rgba(0,0,0,0.6)',
-          'padding:1px 5px',
-          'border-radius:4px',
+          'background:rgba(0,0,0,0.6)', 'padding:1px 5px', 'border-radius:4px',
         ].join(';')
-        name.textContent = field.code
-
+        nameEl.textContent = field.code
         el.appendChild(dot)
-        el.appendChild(name)
+        el.appendChild(nameEl)
 
-        el.addEventListener('mouseenter', () => { dot.style.transform = 'scale(1.15)'; dot.style.zIndex = '200' })
-        el.addEventListener('mouseleave', () => { dot.style.transform = 'scale(1)'; dot.style.zIndex = '1' })
+        // hover — לא לגעת ב-transform של el (MapLibre מנהל אותו); סקייל על dot בלבד
+        el.addEventListener('mouseenter', () => { dot.style.boxShadow = `0 0 22px ${color}cc`; dot.style.zIndex = '200' })
+        el.addEventListener('mouseleave', () => { dot.style.boxShadow = `0 0 ${isRecommend ? '18px' : '10px'} ${color}55`; dot.style.zIndex = '1' })
         el.addEventListener('click', e => {
           e.stopPropagation()
           popup.setLngLat(field.center).setHTML(buildPopupHTML(field)).addTo(map)
           if (onFieldSelect) onFieldSelect(field)
         })
 
-        const m = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+        const fm = new maplibregl.Marker({ element: el, anchor: 'bottom' })
           .setLngLat(field.center)
           .addTo(map)
-        markersRef.current.push(m)
+        markersRef.current.forces.push(fm)
+
+        // ── מרקרי מפגעים ───────────────────────────��─────────
+        if (field.hazards?.length > 0) {
+          const hEl = document.createElement('div')
+          const topSeverity = field.hazards[0].severity
+          const hColor = topSeverity === 'high' ? '#ef4444' : topSeverity === 'medium' ? '#f59e0b' : '#9ca3af'
+          hEl.style.cssText = [
+            'width:26px', 'height:26px', 'border-radius:50%',
+            `background:${hColor}22`, `border:2px solid ${hColor}`,
+            'display:flex', 'align-items:center', 'justify-content:center',
+            'font-size:13px', 'cursor:pointer',
+            `box-shadow:0 0 8px ${hColor}66`,
+          ].join(';')
+          hEl.textContent = '⚠️'
+          hEl.title = field.hazards.map(h => h.label).join(' | ')
+          hEl.addEventListener('click', e => {
+            e.stopPropagation()
+            const html = `<div style="direction:rtl;text-align:right;font-family:sans-serif">
+              <div style="font-weight:700;font-size:13px;color:#f9fafb;margin-bottom:6px">מפגעים — ${field.code}</div>
+              ${field.hazards.map(h => `<div style="font-size:11px;color:${h.severity==='high'?'#ef4444':h.severity==='medium'?'#f59e0b':'#9ca3af'};margin-bottom:3px">⚠️ ${h.label}</div>`).join('')}
+            </div>`
+            popup.setLngLat([field.center[0] + 0.005, field.center[1] + 0.005]).setHTML(html).addTo(map)
+          })
+          const hm = new maplibregl.Marker({ element: hEl, anchor: 'center' })
+            .setLngLat([field.center[0] + 0.008, field.center[1] + 0.006])
+            .addTo(map)
+          markersRef.current.hazards.push(hm)
+        }
+
+        // ── מרקרי תשתיות ─────────────────────────────────────
+        if (field.infrastructure?.length > 0) {
+          const iEl = document.createElement('div')
+          iEl.style.cssText = [
+            'width:26px', 'height:26px', 'border-radius:6px',
+            'background:rgba(59,130,246,0.2)', 'border:2px solid #3b82f6',
+            'display:flex', 'align-items:center', 'justify-content:center',
+            'font-size:13px', 'cursor:pointer',
+            'box-shadow:0 0 8px rgba(59,130,246,0.4)',
+          ].join(';')
+          iEl.textContent = field.infrastructure[0].icon
+          iEl.title = field.infrastructure.map(i => i.label).join(' | ')
+          iEl.addEventListener('click', e => {
+            e.stopPropagation()
+            const html = `<div style="direction:rtl;text-align:right;font-family:sans-serif">
+              <div style="font-weight:700;font-size:13px;color:#f9fafb;margin-bottom:6px">תשתיות — ${field.code}</div>
+              ${field.infrastructure.map(i => `<div style="font-size:11px;color:#9ca3af;margin-bottom:3px">${i.icon} ${i.label}</div>`).join('')}
+            </div>`
+            popup.setLngLat([field.center[0] - 0.005, field.center[1] + 0.005]).setHTML(html).addTo(map)
+          })
+          const im = new maplibregl.Marker({ element: iEl, anchor: 'center' })
+            .setLngLat([field.center[0] - 0.008, field.center[1] + 0.006])
+            .addTo(map)
+          markersRef.current.infrastructure.push(im)
+        }
       })
     })
 
@@ -217,8 +336,8 @@ export default function RegionMapView({ onFieldSelect, selectedFieldId, mode = '
 
     return () => {
       clearTimeout(t)
-      markersRef.current.forEach(m => m.remove())
-      markersRef.current = []
+      Object.values(markersRef.current).flat().forEach(m => m.remove())
+      markersRef.current = { forces: [], hazards: [], infrastructure: [] }
       map.remove()
       mapObj.current = null
     }
@@ -228,21 +347,18 @@ export default function RegionMapView({ onFieldSelect, selectedFieldId, mode = '
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 0 }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 
-      {/* חיפוש — רק במצב free */}
-      {mode === 'free' && (
-        <div
-          style={{ position: 'absolute', top: 12, right: 12, zIndex: 20 }}
-          className="flex items-center gap-2 bg-demo-surface/95 border border-demo-border rounded-xl px-4 py-2.5 shadow-xl w-64"
+      {/* כפתור 3D — צד ימין עליון (אחיד עם MapView) */}
+      <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}>
+        <button
+          onClick={toggle3D}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg
+            ${is3D
+              ? 'bg-demo-gold text-black'
+              : 'bg-demo-surface/90 text-demo-gold border border-demo-gold/40 backdrop-blur-sm'}`}
         >
-          <span className="text-gray-400 text-sm">🔍</span>
-          <input
-            type="text"
-            placeholder="חפש שטח... (דוגמה: 120, גולן, כיבוש)"
-            className="flex-1 bg-transparent text-white text-sm focus:outline-none placeholder:text-gray-600"
-            dir="rtl"
-          />
-        </div>
-      )}
+          ⛰️ {is3D ? '2D' : '3D'}
+        </button>
+      </div>
 
       {/* אינדיקטור מצב urgent */}
       {mode === 'urgent' && (

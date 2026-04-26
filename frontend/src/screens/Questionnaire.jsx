@@ -5,13 +5,18 @@ import Header from '../components/common/Header'
 import BackButton from '../components/common/BackButton'
 
 const READINESS_LEVELS = [
-  { value: 'aleph', label: 'א׳', sub: 'ראשונה', color: 'green',  blocked: false },
-  { value: 'bet',   label: 'ב׳', sub: 'שנייה',  color: 'green',  blocked: false },
-  { value: 'gimel', label: 'ג׳', sub: 'שלישית', color: 'orange', blocked: true  },
-  { value: 'dalet', label: 'ד׳', sub: 'רביעית', color: 'red',    blocked: true  },
+  { value: 'aleph', label: 'א׳', sub: 'ראשונה', desc: 'כשיר לחלוטין — כל מסלולי אש פתוחים',         color: 'green',  blocked: false },
+  { value: 'bet',   label: 'ב׳', sub: 'שנייה',  desc: 'כשיר — נדרש קצין מאשר מדרגת סמ"ה ומעלה',    color: 'green',  blocked: false },
+  { value: 'gimel', label: 'ג׳', sub: 'שלישית', desc: 'כשירות חלקית — אסור לתרגל ירי חי',           color: 'orange', blocked: true  },
+  { value: 'dalet', label: 'ד׳', sub: 'רביעית', desc: 'לא כשיר — יש לשדרג לפני כל פעילות אש',       color: 'red',    blocked: true  },
 ]
 
-const OBJECTIVES = ['כיבוש', 'הגנה', 'סיור', 'קרב בשטח בנוי', 'לוגיסטי', 'קשר', 'רפואי']
+const OBJECTIVES = [
+  'תרגול לוחמה בשטח פתוח',
+  'תרגול לוחמה בשטח בנוי',
+  'תרגול לוגיסטיקה/רפואה/קשר',
+  'תרגול פיקוד',
+]
 const AMMO_TYPES = ['5.56 בלבד', '5.56 + חבלה', 'ירי כבד', 'חי"ר + שריון', 'ללא חי']
 
 // אפשרויות שת"פ (מלבד פינוי רכוב שנוסף אוטומטית)
@@ -37,7 +42,7 @@ const AUTO_EVAC = {
 export default function Questionnaire() {
   const navigate = useNavigate()
   const [form, setForm] = useState({
-    objective:   'כיבוש',
+    objective:   'תרגול לוחמה בשטח פתוח',
     topic:       '',
     area:        'שטח אש 309ה',
     duration:    '3',
@@ -45,7 +50,7 @@ export default function Questionnaire() {
     ammo:        '5.56 + חבלה',
     date:        '05/05/2026',
     readiness:   null,
-    forceSize:   '150',
+    forceSize:   '30',
     composition: 'חי"ר',
   })
 
@@ -55,7 +60,7 @@ export default function Questionnaire() {
   const [sadanAccepted,  setSadanAccepted]  = useState(false)
 
   // האם תרגיל רטוב?
-  const isWet = form.firingCond === 'רטוב' || form.firingCond === 'שניהם'
+  const isWet = form.firingCond === 'רטוב'
   // כל שת"פ כולל פינוי אוטומטי
   const allCollab = [
     ...(isWet ? [AUTO_EVAC] : []),
@@ -115,11 +120,11 @@ export default function Questionnaire() {
               </select>
             </Field>
 
-            <Field label="נושא / כותרת">
+            <Field label="שיטה">
               <input
                 value={form.topic}
                 onChange={e => set('topic', e.target.value)}
-                placeholder="לדוגמה: כיבוש בטונדה בגיבוי שריון"
+                placeholder="לדוגמה: ניווט לילי עד לאיתור בשטח בנוי"
                 className={inputCls}
               />
             </Field>
@@ -134,7 +139,7 @@ export default function Questionnaire() {
               </Field>
               <Field label="תנאי ירי">
                 <select value={form.firingCond} onChange={e => setFiringCond(e.target.value)} className={inputCls}>
-                  {['יבש', 'רטוב', 'שניהם'].map(w => <option key={w}>{w}</option>)}
+                  {['יבש', 'רטוב'].map(w => <option key={w}>{w}</option>)}
                 </select>
               </Field>
             </div>
@@ -225,7 +230,7 @@ export default function Questionnaire() {
                     key={r.value}
                     onClick={() => set('readiness', r.value)}
                     className={`
-                      relative flex flex-col items-center justify-center py-4 rounded-2xl border-2 transition-all font-bold text-2xl
+                      relative flex flex-col items-center justify-center py-3 px-2 rounded-2xl border-2 transition-all
                       ${form.readiness === r.value
                         ? r.blocked
                           ? 'border-demo-danger bg-demo-danger/10 text-demo-danger'
@@ -234,11 +239,18 @@ export default function Questionnaire() {
                       }
                     `}
                   >
-                    {r.label}
-                    <span className="text-xs font-normal mt-1 opacity-70">{r.sub}</span>
                     {r.blocked && (
                       <span className="absolute top-2 right-2 text-demo-danger"><AlertCircle size={14} /></span>
                     )}
+                    <span className="font-bold text-2xl">{r.label}</span>
+                    <span className="text-xs font-normal mt-0.5 opacity-70">{r.sub}</span>
+                    <span className={`text-[10px] mt-1.5 leading-tight text-center font-normal
+                      ${form.readiness === r.value
+                        ? r.blocked ? 'text-demo-danger/80' : 'text-demo-gold/80'
+                        : 'text-gray-600'
+                      }`}>
+                      {r.desc}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -254,6 +266,9 @@ export default function Questionnaire() {
             <div className="grid grid-cols-2 gap-3">
               <Field label='גודל כוח (כ"א)'>
                 <input type="number" value={form.forceSize} onChange={e => set('forceSize', e.target.value)} className={inputCls} />
+                <div className="text-gray-500 text-xs leading-relaxed pt-0.5">
+                  מ"מ · 3 מכ"ים · סמל · ~25 לוחמים
+                </div>
               </Field>
               <Field label="הרכב">
                 <select value={form.composition} onChange={e => set('composition', e.target.value)} className={inputCls}>
@@ -304,8 +319,18 @@ export default function Questionnaire() {
                 <span>צור 3 מתווים</span>
                 {canProceed && <ChevronLeft size={20} />}
               </button>
-              {!form.readiness && (
-                <p className="text-gray-500 text-xs text-center mt-2">יש לבחור רמת כשירות</p>
+              {!canProceed && (
+                <div className="mt-2 space-y-1">
+                  {!form.readiness && (
+                    <p className="text-gray-500 text-xs text-center">· יש לבחור רמת כשירות</p>
+                  )}
+                  {blocked && (
+                    <p className="text-demo-danger text-xs text-center">· כשירות {form.readiness === 'gimel' ? 'ג׳' : 'ד׳'} אינה מאפשרת תרגיל — יש לשדרג</p>
+                  )}
+                  {!form.topic && (
+                    <p className="text-gray-500 text-xs text-center">· יש למלא את שדה "שיטה"</p>
+                  )}
+                </div>
               )}
             </div>
           </div>

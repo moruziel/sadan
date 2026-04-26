@@ -1,38 +1,25 @@
 import { useNavigate } from 'react-router-dom'
-import { MapPin, Search, Zap, ChevronLeft } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import Header from '../components/common/Header'
 
 const OPTIONS = [
   {
-    key: 'region',
-    icon: MapPin,
+    key: 'single',
     emoji: '📍',
-    title: 'מגזרה מוקצית',
-    subtitle: 'גולן — אזור 251',
-    desc: 'סדן מציגה את שטחי האש הזמינים בגזרה שלך, מדורגים לפי התאמה לאימון.',
-    badge: 'מומלץ',
+    title: 'שטח מוקצה',
+    subtitle: 'גולן — שטח 309ה',
+    desc: 'עבור ישירות למפת השטח שהוקצה לגדוד שלך ותכנן את האימון.',
+    badge: 'מוקצה לך',
     badgeColor: 'bg-demo-gold text-black',
     highlight: true,
   },
   {
-    key: 'free',
-    icon: Search,
+    key: 'region',
     emoji: '🔍',
-    title: 'חיפוש חופשי',
-    subtitle: 'לפי מטרות / אופי',
-    desc: 'חפש שטח אש בכל הארץ לפי סוג תרגיל, יכולות נדרשות, או שם ספציפי.',
+    title: 'בחירת שטח',
+    subtitle: 'גזרה 251 — הגולן',
+    desc: 'בחר שטח אש מתוך כל השטחים בגזרה, עם אפשרות לסנן לפי זמינות.',
     badge: null,
-    highlight: false,
-  },
-  {
-    key: 'urgent',
-    icon: Zap,
-    emoji: '⚡',
-    title: 'אימון דחוף',
-    subtitle: 'מה פנוי עכשיו?',
-    desc: 'הצג רק שטחים פנויים השבוע — מסודרים לפי קרבה ומוכנות מיידית.',
-    badge: '3 פנויים',
-    badgeColor: 'bg-green-500/20 text-green-400 border border-green-500/30',
     highlight: false,
   },
 ]
@@ -53,19 +40,20 @@ export default function FieldSelection() {
         {/* כותרת */}
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-black text-white">בחירת שטח אש</h1>
-          <p className="text-gray-400 text-base">איך תרצה למצוא את השטח?</p>
+          <p className="text-gray-400 text-base">איך תרצה לבחור את השטח?</p>
         </div>
 
-        {/* כרטיסי בחירה */}
-        <div className="grid grid-cols-3 gap-5 w-full max-w-3xl">
+        {/* כרטיסי בחירה — 2 אפשרויות */}
+        <div className="flex gap-6 w-full max-w-2xl justify-center">
           {OPTIONS.map((opt, i) => (
             <button
               key={opt.key}
               onClick={() => handleSelect(opt.key)}
               style={{ animationDelay: `${i * 80}ms` }}
               className={`
-                relative flex flex-col items-center text-center gap-4 p-6 rounded-2xl border
+                relative flex flex-col items-center text-center gap-4 p-8 rounded-2xl border
                 transition-all duration-200 hover:scale-105 hover:shadow-2xl group animate-fade-up
+                flex-1 max-w-xs
                 ${opt.highlight
                   ? 'bg-demo-gold/10 border-demo-gold/60 hover:bg-demo-gold/15'
                   : 'bg-demo-surface border-demo-border hover:border-demo-gold/40'
@@ -81,7 +69,7 @@ export default function FieldSelection() {
 
               {/* אייקון */}
               <div className={`
-                w-16 h-16 rounded-2xl flex items-center justify-center text-3xl
+                w-20 h-20 rounded-2xl flex items-center justify-center text-4xl
                 ${opt.highlight ? 'bg-demo-gold/20' : 'bg-demo-card'}
                 group-hover:scale-110 transition-transform duration-200
               `}>
@@ -89,8 +77,8 @@ export default function FieldSelection() {
               </div>
 
               {/* טקסט */}
-              <div className="space-y-1">
-                <div className="text-white font-bold text-base">{opt.title}</div>
+              <div className="space-y-1.5">
+                <div className="text-white font-bold text-lg">{opt.title}</div>
                 <div className={`text-sm font-medium ${opt.highlight ? 'text-demo-gold' : 'text-gray-400'}`}>
                   {opt.subtitle}
                 </div>
@@ -100,17 +88,16 @@ export default function FieldSelection() {
               </div>
 
               {/* חץ */}
-              <div className={`flex items-center gap-1 text-xs font-semibold
+              <div className={`flex items-center gap-1 text-sm font-semibold
                 ${opt.highlight ? 'text-demo-gold' : 'text-gray-500 group-hover:text-demo-gold'}
                 transition-colors`}>
                 <span>המשך</span>
-                <ChevronLeft size={14} />
+                <ChevronLeft size={15} />
               </div>
             </button>
           ))}
         </div>
 
-        {/* הסבר */}
         <p className="text-gray-600 text-xs text-center max-w-md">
           סדן מנתחת את הנחיות המפקד, זמינות שטחים, ותקלות בטיחות ידועות — ומציגה המלצה מדויקת.
         </p>
