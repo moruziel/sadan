@@ -134,27 +134,37 @@ const FIRE_CONES_DATA = {
 
 // ── unit marker element ───────────────────────────────────────────────────────
 function createUnitEl(unit) {
+  // wrap must have explicit 34×34 so absolute children anchor correctly
   const wrap = document.createElement('div')
-  wrap.style.cssText = 'position:relative;z-index:100;transition:transform 2.2s cubic-bezier(0.4,0,0.2,1);'
+  wrap.style.cssText = [
+    'position:relative', 'z-index:100',
+    'width:34px', 'height:34px',
+    'overflow:visible',
+    'transition:transform 2.4s cubic-bezier(0.25,0.46,0.45,0.94)',
+  ].join(';')
 
-  // direction arrow
+  // direction arrow — centered above el
   const arrow = document.createElement('div')
   arrow.id = `sim-arrow-${unit.id}`
   arrow.style.cssText = [
-    'position:absolute', 'top:-13px', 'left:50%',
+    'position:absolute',
+    'top:-14px', 'left:17px',           // 17 = half of 34px
     'transform:translateX(-50%) rotate(0deg)',
     'width:0', 'height:0',
-    'border-left:5px solid transparent', 'border-right:5px solid transparent',
+    'border-left:5px solid transparent',
+    'border-right:5px solid transparent',
     `border-bottom:11px solid ${unit.color}`,
-    'opacity:0.7',
-    'transition:transform 1.8s ease',
+    'opacity:0.75',
+    'transition:transform 2s ease',
     'pointer-events:none',
   ].join(';')
   wrap.appendChild(arrow)
 
+  // main icon square
   const el = document.createElement('div')
   el.id = `sim-unit-${unit.id}`
   el.style.cssText = [
+    'position:absolute', 'top:0', 'left:0',
     'width:34px', 'height:34px',
     'display:flex', 'align-items:center', 'justify-content:center',
     `border:2.5px solid ${unit.color}`, 'border-radius:4px',
@@ -164,20 +174,26 @@ function createUnitEl(unit) {
     'cursor:pointer', 'user-select:none', 'backdrop-filter:blur(2px)',
     'transition:border-color 0.5s,box-shadow 0.5s',
   ].join(';')
-  // store base colors for pulse
   el.dataset.baseColor = unit.color
   el.style.setProperty('--bs-normal', `0 0 14px ${unit.color}70,0 2px 6px rgba(0,0,0,0.7)`)
   el.style.setProperty('--bs-pulse',  `0 0 30px ${unit.color},0 0 55px ${unit.color}66,0 2px 6px rgba(0,0,0,0.7)`)
   el.textContent = unit.icon
 
+  // label — pinned exactly below the icon square (no gap)
   const lbl = document.createElement('div')
   lbl.style.cssText = [
-    'position:absolute', 'bottom:-17px', 'left:50%',
+    'position:absolute',
+    'top:37px',                         // 34px height + 3px gap
+    'left:17px',                        // half of 34px
     'transform:translateX(-50%)',
-    `color:${unit.color}`, 'font-size:9px', 'font-weight:700',
-    'white-space:nowrap', 'text-shadow:0 1px 4px #000,0 0 8px #000',
-    'background:rgba(0,0,0,0.75)', 'padding:1px 5px', 'border-radius:3px',
+    `color:${unit.color}`,
+    'font-size:9px', 'font-weight:700',
+    'white-space:nowrap',
+    'text-shadow:0 1px 4px #000,0 0 8px #000',
+    'background:rgba(0,0,0,0.8)',
+    'padding:1px 5px', 'border-radius:3px',
     'pointer-events:none',
+    'line-height:1.4',
   ].join(';')
   lbl.textContent = unit.label
 
@@ -230,27 +246,28 @@ function HUDPanel({ phase, visible, onToggle }) {
 }
 
 // ── Phase title card (S02) ────────────────────────────────────────────────────
-function PhaseTitleCard({ phase, visible }) {
-  if (!visible) return null
+function PhaseTitleCard({ phase }) {
   const data = SIM_PHASES[phase]
   const tact = PHASE_TACTICAL[phase]
   return (
-    <div
-      className="absolute inset-0 flex items-center justify-center z-40 pointer-events-none"
-      style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)', position: 'absolute', width: '100%', height: '100%' }}
-    >
+    // inset-0 fills the map container, flex centers the card — no conflicting inline styles
+    <div className="absolute inset-0 flex items-center justify-center z-40 pointer-events-none" dir="rtl">
       <div
-        className="bg-demo-surface/95 border border-demo-gold/40 rounded-2xl px-8 py-5 text-center backdrop-blur max-w-sm w-full mx-4"
-        style={{ animation: 'phaseCardIn 3s ease-in-out forwards' }}
-        dir="rtl"
+        className="bg-demo-surface/96 border border-demo-gold/50 rounded-2xl px-8 py-5 text-center shadow-2xl"
+        style={{
+          backdropFilter: 'blur(12px)',
+          animation: 'phaseCardIn 3s ease-in-out forwards',
+          maxWidth: '340px',
+          width: 'calc(100% - 48px)',
+        }}
       >
-        <div className="text-4xl mb-2">{tact?.icon ?? '⚡'}</div>
-        <div className="text-demo-gold font-black text-xl mb-1">{data.longLabel}</div>
-        <div className="text-gray-300 text-sm mb-3">{data.time}</div>
+        <div className="text-4xl mb-2 leading-none">{tact?.icon ?? '⚡'}</div>
+        <div className="text-demo-gold font-black text-xl mb-1 leading-tight">{data.longLabel}</div>
+        <div className="text-gray-400 text-sm mb-3">{data.time}</div>
         {tact?.details && (
-          <div className="space-y-1 border-t border-demo-border pt-3">
+          <div className="space-y-1 border-t border-demo-border/60 pt-3">
             {tact.details.map((d, i) => (
-              <div key={i} className="text-gray-300 text-xs">{d}</div>
+              <div key={i} className="text-gray-300 text-xs leading-relaxed">{d}</div>
             ))}
           </div>
         )}
@@ -529,20 +546,12 @@ export default function Simulation() {
     const data = SIM_PHASES[phase]
     const nextData = SIM_PHASES[phase + 1] ?? null
 
-    // 1. Move unit markers + update trails + arrows
-    for (const [unitId, pos] of Object.entries(data.units)) {
-      markersRef.current[unitId]?.marker.setLngLat(pos)
+    // 1. Update arrows + pulse immediately (no delay needed)
+    for (const [unitId] of Object.entries(data.units)) {
+      const pos    = data.units[unitId]
+      const arrowEl  = markersRef.current[unitId]?.arrow
+      const innerEl  = markersRef.current[unitId]?.el
 
-      // update trail
-      const trail = trailsRef.current[unitId]
-      const last = trail[trail.length - 1]
-      if (!last || last[0] !== pos[0] || last[1] !== pos[1]) {
-        trail.push(pos)
-        if (trail.length > 5) trail.shift()
-      }
-
-      // update direction arrow
-      const arrowEl = markersRef.current[unitId]?.arrow
       if (arrowEl && nextData) {
         const nextPos = nextData.units[unitId]
         if (nextPos) {
@@ -550,26 +559,38 @@ export default function Simulation() {
           arrowEl.style.transform = `translateX(-50%) rotate(${b}deg)`
         }
       }
-
-      // pulse active units
-      const innerEl = markersRef.current[unitId]?.el
       if (innerEl) {
         const isActive = (ACTIVE_UNITS[phase] ?? []).includes(unitId)
         innerEl.style.animation = isActive ? 'simPulse 1.5s ease-in-out infinite' : ''
       }
     }
 
-    // 2. Update trail source
-    try {
-      const trailFeatures = Object.entries(trailsRef.current)
-        .filter(([_, pts]) => pts.length >= 2)
-        .map(([unitId, pts]) => ({
-          type: 'Feature',
-          properties: { color: SIM_UNITS[unitId]?.color ?? '#888' },
-          geometry: { type: 'LineString', coordinates: pts },
-        }))
-      map.getSource('sim-trails')?.setData({ type: 'FeatureCollection', features: trailFeatures })
-    } catch (_) {}
+    // Move units + update trails after a short delay so the camera starts moving first
+    // This staggers the motion: camera leads → units follow → feels cinematic not jumpy
+    setTimeout(() => {
+      if (!mapRef.current) return
+      for (const [unitId, pos] of Object.entries(data.units)) {
+        markersRef.current[unitId]?.marker.setLngLat(pos)
+
+        const trail = trailsRef.current[unitId]
+        const last = trail[trail.length - 1]
+        if (!last || last[0] !== pos[0] || last[1] !== pos[1]) {
+          trail.push(pos)
+          if (trail.length > 5) trail.shift()
+        }
+      }
+      // Update trail source after all units moved
+      try {
+        const trailFeatures = Object.entries(trailsRef.current)
+          .filter(([_, pts]) => pts.length >= 2)
+          .map(([unitId, pts]) => ({
+            type: 'Feature',
+            properties: { color: SIM_UNITS[unitId]?.color ?? '#888' },
+            geometry: { type: 'LineString', coordinates: pts },
+          }))
+        map.getSource('sim-trails')?.setData({ type: 'FeatureCollection', features: trailFeatures })
+      } catch (_) {}
+    }, 300)  // 300ms after camera starts moving
 
     // 3. Fire lines + cones
     const fireLines = FIRE_LINES_DATA[phase] ?? []
@@ -649,63 +670,102 @@ export default function Simulation() {
       map.getSource('sim-fog')?.setData({ type: 'FeatureCollection', features: fogFeatures })
     } catch (_) {}
 
-    // 8. Helicopter medevac (phase 5 — evacuate after first assault)
+    // 8. Helicopter medevac (phase 5 — flies from south of battle area to יעד א׳ + back)
+    //    Start point is within the phase-5 camera view (center [35.233,31.838] zoom 14.5)
     clearInterval(heliTimer.current)
-    if (heliRef.current) {
-      heliRef.current.remove()
-      heliRef.current = null
-    }
+    if (heliRef.current) { heliRef.current.remove(); heliRef.current = null }
     if (phase === 5) {
       const heliEl = document.createElement('div')
-      heliEl.style.cssText = 'width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:22px;animation:heliFloat 1s ease-in-out infinite;filter:drop-shadow(0 0 6px rgba(255,255,255,0.6));'
+      heliEl.style.cssText = [
+        'width:36px', 'height:36px',
+        'display:flex', 'align-items:center', 'justify-content:center',
+        'font-size:26px',
+        'animation:heliFloat 0.9s ease-in-out infinite',
+        'filter:drop-shadow(0 0 8px rgba(255,255,255,0.7)) drop-shadow(0 0 14px rgba(34,197,94,0.5))',
+        'position:relative',
+        'cursor:default',
+      ].join(';')
       heliEl.textContent = '🚁'
-      const medical = [35.232, 31.795]
-      const targetA = [35.228, 31.837]
+
+      // label
+      const heliLbl = document.createElement('div')
+      heliLbl.style.cssText = 'position:absolute;bottom:-13px;left:50%;transform:translateX(-50%);color:#86efac;font-size:8px;font-weight:700;white-space:nowrap;background:rgba(0,0,0,0.8);padding:1px 5px;border-radius:3px;pointer-events:none;'
+      heliLbl.textContent = 'פינוי רפואי'
+      heliEl.appendChild(heliLbl)
+
+      // Start SW of battle area — clearly within camera view for phase 5
+      const heliStart  = [35.221, 31.826]
+      const heliTarget = [35.228, 31.837]   // יעד א׳
+
       const heli = new maplibregl.Marker({ element: heliEl, anchor: 'center' })
-        .setLngLat(medical).addTo(mapRef.current)
+        .setLngLat(heliStart).addTo(map)
       heliRef.current = heli
 
-      // fly to יעד א׳ in 20 steps, wait 1.5s, fly back
-      const STEPS = 20
+      const STEPS = 22
       let step = 0
-      let returning = false
-      heliTimer.current = setInterval(() => {
-        if (!heliRef.current) { clearInterval(heliTimer.current); return }
+      let phase2 = false  // return trip
+      const intervalId = setInterval(() => {
+        if (!heliRef.current) { clearInterval(intervalId); return }
         step++
-        if (!returning && step <= STEPS) {
+        if (!phase2 && step <= STEPS) {
           const t = step / STEPS
-          heli.setLngLat([
-            medical[0] + (targetA[0] - medical[0]) * t,
-            medical[1] + (targetA[1] - medical[1]) * t,
+          heliRef.current.setLngLat([
+            heliStart[0] + (heliTarget[0] - heliStart[0]) * t,
+            heliStart[1] + (heliTarget[1] - heliStart[1]) * t,
           ])
-          if (step === STEPS) { returning = true; step = 0 }
-        } else if (returning && step <= STEPS) {
+          if (step === STEPS) { step = 0; phase2 = true }   // hover at target for 2 ticks then return
+        } else if (phase2 && step <= STEPS) {
           const t = step / STEPS
-          heli.setLngLat([
-            targetA[0] + (medical[0] - targetA[0]) * t,
-            targetA[1] + (medical[1] - targetA[1]) * t,
+          heliRef.current.setLngLat([
+            heliTarget[0] + (heliStart[0] - heliTarget[0]) * t,
+            heliTarget[1] + (heliStart[1] - heliTarget[1]) * t,
           ])
-          if (step === STEPS) clearInterval(heliTimer.current)
+          if (step === STEPS) clearInterval(intervalId)
         }
-      }, 300)
+      }, 280)
+      heliTimer.current = intervalId
     }
 
-    // 9. Tank marker (phase 3+4 — supporting fire from assembly)
-    if (tankRef.current) {
-      tankRef.current.remove()
-      tankRef.current = null
-    }
+    // 9. Tank / heavy support fire marker (phases 3 + 4)
+    //    Placed distinctly west of the MM marker so it's clearly visible
+    if (tankRef.current) { tankRef.current.remove(); tankRef.current = null }
     if (phase === 3 || phase === 4) {
+      // Wrap with explicit sizing so label aligns
+      const tankWrap = document.createElement('div')
+      tankWrap.style.cssText = 'position:relative;width:40px;height:40px;overflow:visible;'
+
       const tankEl = document.createElement('div')
-      tankEl.style.cssText = `width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:22px;filter:drop-shadow(0 0 8px rgba(255,165,0,0.8));${phase === 3 ? 'animation:tankFire 0.6s ease-out 3' : ''};`
+      tankEl.style.cssText = [
+        'position:absolute', 'top:0', 'left:0',
+        'width:40px', 'height:40px',
+        'display:flex', 'align-items:center', 'justify-content:center',
+        'font-size:26px',
+        'border:2px solid #f59e0b', 'border-radius:6px',
+        'background:rgba(245,158,11,0.15)',
+        'box-shadow:0 0 16px rgba(245,158,11,0.7), 0 2px 8px rgba(0,0,0,0.8)',
+        'filter:drop-shadow(0 0 6px rgba(255,165,0,0.9))',
+        phase === 3 ? 'animation:tankFire 0.5s ease-out 4' : '',
+      ].join(';')
       tankEl.textContent = '🪖'
-      const lbl = document.createElement('div')
-      lbl.style.cssText = 'position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);color:#fbbf24;font-size:8px;font-weight:700;white-space:nowrap;text-shadow:0 1px 3px #000;pointer-events:none;background:rgba(0,0,0,0.75);padding:1px 4px;border-radius:3px;'
-      lbl.textContent = 'תמיכת אש'
-      tankEl.style.position = 'relative'
-      tankEl.appendChild(lbl)
-      const tankPos = data.units.mm  // at MM position
-      const tank = new maplibregl.Marker({ element: tankEl, anchor: 'center' })
+
+      const tankLbl = document.createElement('div')
+      tankLbl.style.cssText = [
+        'position:absolute', 'top:43px', 'left:20px',
+        'transform:translateX(-50%)',
+        'color:#fbbf24', 'font-size:8px', 'font-weight:700',
+        'white-space:nowrap', 'text-shadow:0 1px 3px #000',
+        'background:rgba(0,0,0,0.85)', 'padding:1px 5px', 'border-radius:3px',
+        'pointer-events:none',
+      ].join(';')
+      tankLbl.textContent = 'תמיכת אש'
+
+      tankWrap.appendChild(tankEl)
+      tankWrap.appendChild(tankLbl)
+
+      // Offset west of MM so it doesn't overlap the MM marker
+      const mmPos = data.units.mm
+      const tankPos = [mmPos[0] - 0.003, mmPos[1] - 0.001]
+      const tank = new maplibregl.Marker({ element: tankWrap, anchor: 'center' })
         .setLngLat(tankPos).addTo(map)
       tankRef.current = tank
     }
@@ -836,8 +896,8 @@ export default function Simulation() {
       <div className="flex-1 relative min-h-0">
         <div ref={mapElRef} className="w-full h-full" />
 
-        {/* phase title card (S02) */}
-        {showCard && <PhaseTitleCard phase={cardPhase} visible={showCard} />}
+        {/* phase title card (S02) — rendered only while showCard is true */}
+        {showCard && <PhaseTitleCard phase={cardPhase} />}
 
         {/* HUD (S06) */}
         <HUDPanel phase={phase} visible={hudVisible} onToggle={() => setHudVisible(false)} />
