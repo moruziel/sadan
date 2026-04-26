@@ -15,7 +15,7 @@ export const SIM_PHASES = [
     label: 'כינוס',
     longLabel: 'שלב א׳ — כינוס (H-4)',
     time: 'H-4',
-    holdMs: 3500,
+    holdMs: 9000,
     narration: 'שלב א׳ — כינוס. מחלקה ב׳ מתכנסת באזור הכינוס. סגן אברהם לוי, מ"מ, מבצע תדריך 14 סעיפים. בדיקת נשק, חלוקת תחמושת, אישור קצין בטיחות.',
     camera: { center: [35.233, 31.825], zoom: 13.5, bearing: 0, pitch: 45 },
     units: {
@@ -30,7 +30,7 @@ export const SIM_PHASES = [
     label: 'תנועה',
     longLabel: 'שלב ב׳ — תנועה (H-2)',
     time: 'H-2',
-    holdMs: 3500,
+    holdMs: 9000,
     narration: 'שלב ב׳ — תנועה. הכוח יוצא מנקודת המוצא לאורך הציר הראשי. 2.4 ק"מ עד לאזור הביסוס. נ.ד. 1 — תחנה דרומית.',
     camera: { center: [35.222, 31.811], zoom: 13.5, bearing: 350, pitch: 50 },
     units: {
@@ -45,7 +45,7 @@ export const SIM_PHASES = [
     label: 'ביסוס',
     longLabel: 'שלב ג׳ — ביסוס (H)',
     time: 'H',
-    holdMs: 3500,
+    holdMs: 9000,
     narration: 'שלב ג׳ — ביסוס. נ.ד. 2. הכוח מגיע לאזור ביסוס. כיתה ב׳ מתפצלת לעמדת ירי ברתק א׳ — אזימוט 005°. כיתות א׳ וג׳ ממשיכות צפונה.',
     camera: { center: [35.221, 31.822], zoom: 14, bearing: 15, pitch: 55 },
     units: {
@@ -60,7 +60,7 @@ export const SIM_PHASES = [
     label: 'כיסוי',
     longLabel: 'שלב ד׳ — כיסוי (H+1)',
     time: 'H+1',
-    holdMs: 4000,
+    holdMs: 10000,
     narration: 'שלב ד׳ — כיסוי. נ.ד. 3. כיתה ב׳ פותחת ירי ברתק על יעד א׳, אזימוט 010°, גבולות 355° עד 025°. תחת הכיסוי — כיתות א׳ וג׳ מתקדמות ליעד א׳.',
     camera: { center: [35.222, 31.830], zoom: 14.5, bearing: 8, pitch: 58 },
     units: {
@@ -75,7 +75,7 @@ export const SIM_PHASES = [
     label: 'יעד א׳',
     longLabel: 'שלב ה׳ — הסתערות יעד א׳ (H+2:30)',
     time: 'H+2:30',
-    holdMs: 4000,
+    holdMs: 12000,
     narration: 'הסתערות על יעד א׳ — בטונדה מערבית. כיתות א׳ וג׳ מסתערות בירי מהמותן. ביטול ירי ברתק בפקודת מ"מ בקשר בלבד — "נמר-72 חדל".',
     camera: { center: [35.226, 31.837], zoom: 15, bearing: 5, pitch: 62 },
     units: {
@@ -90,7 +90,7 @@ export const SIM_PHASES = [
     label: 'מעבר',
     longLabel: 'שלב ה׳ המשך — ביסוס יעד א׳ / מעבר (H+3)',
     time: 'H+3',
-    holdMs: 3500,
+    holdMs: 10000,
     narration: 'ביסוס יעד א׳. כיתה ג׳ עוברת לעמדת ירי ב׳ — אזימוט 015° על יעד ב׳. כיתות א׳ וב׳ מתארגנות להסתערות על המטרה העיקרית.',
     camera: { center: [35.233, 31.838], zoom: 14.5, bearing: 12, pitch: 60 },
     units: {
@@ -105,7 +105,7 @@ export const SIM_PHASES = [
     label: 'יעד ב׳',
     longLabel: 'שלב ה׳ סיום — כיבוש יעד ב׳ (H+3:30)',
     time: 'H+3:30',
-    holdMs: 4500,
+    holdMs: 12000,
     narration: 'כיבוש יעד ב׳ — בטונדה מרכזית, המטרה העיקרית. כיתות א׳ וב׳ מסתערות. כיתה ג׳ מכסה מעמדת ירי ב׳, גבולות 000° עד 030°.',
     camera: { center: [35.240, 31.842], zoom: 15, bearing: 10, pitch: 65 },
     units: {
@@ -120,7 +120,7 @@ export const SIM_PHASES = [
     label: 'נסיגה',
     longLabel: 'שלב ו׳ — ביסוס ונסיגה (H+4)',
     time: 'H+4',
-    holdMs: 3000,
+    holdMs: 9000,
     narration: 'ביסוס שני היעדים. תחקיר ביניים. נסיגה מסודרת לאזור הכינוס. סדר הנסיגה הפוך לסדר הכניסה. הכוח מתכנס בנ.כ. לתחקיר סיום.',
     camera: { center: [35.233, 31.825], zoom: 13.5, bearing: 0, pitch: 40 },
     units: {

@@ -132,29 +132,48 @@ const FIRE_CONES_DATA = {
   ],
 }
 
-// ── unit marker element ───────────────────────────────────────────────────────
+// ── unit marker element — aggressive 46×46 with sonar-ping ring ──────────────
+const MARKER_SIZE = 46
+
 function createUnitEl(unit) {
-  // wrap must have explicit 34×34 so absolute children anchor correctly
+  const S = MARKER_SIZE
+  const half = S / 2  // 23
+
+  // wrap: explicit S×S — MapLibre sets transform on this element
   const wrap = document.createElement('div')
   wrap.style.cssText = [
     'position:relative', 'z-index:100',
-    'width:34px', 'height:34px',
+    `width:${S}px`, `height:${S}px`,
     'overflow:visible',
     'transition:transform 2.4s cubic-bezier(0.25,0.46,0.45,0.94)',
   ].join(';')
 
-  // direction arrow — centered above el
+  // sonar-ping ring (hidden by default, shown when active)
+  const ring = document.createElement('div')
+  ring.id = `sim-ring-${unit.id}`
+  ring.style.cssText = [
+    'position:absolute',
+    'top:50%', 'left:50%',
+    'transform:translate(-50%,-50%) scale(0.75)',
+    `width:${S + 16}px`, `height:${S + 16}px`,
+    'border-radius:50%',
+    `border:2.5px solid ${unit.color}`,
+    'opacity:0', 'pointer-events:none',
+  ].join(';')
+  wrap.appendChild(ring)
+
+  // direction arrow
   const arrow = document.createElement('div')
   arrow.id = `sim-arrow-${unit.id}`
   arrow.style.cssText = [
     'position:absolute',
-    'top:-14px', 'left:17px',           // 17 = half of 34px
+    `top:-16px`, `left:${half}px`,
     'transform:translateX(-50%) rotate(0deg)',
     'width:0', 'height:0',
-    'border-left:5px solid transparent',
-    'border-right:5px solid transparent',
-    `border-bottom:11px solid ${unit.color}`,
-    'opacity:0.75',
+    'border-left:6px solid transparent',
+    'border-right:6px solid transparent',
+    `border-bottom:13px solid ${unit.color}`,
+    'opacity:0.85',
     'transition:transform 2s ease',
     'pointer-events:none',
   ].join(';')
@@ -165,41 +184,40 @@ function createUnitEl(unit) {
   el.id = `sim-unit-${unit.id}`
   el.style.cssText = [
     'position:absolute', 'top:0', 'left:0',
-    'width:34px', 'height:34px',
+    `width:${S}px`, `height:${S}px`,
     'display:flex', 'align-items:center', 'justify-content:center',
-    `border:2.5px solid ${unit.color}`, 'border-radius:4px',
-    `background:${unit.color}25`, `color:${unit.color}`,
-    'font-size:13px', 'font-weight:900',
-    `box-shadow:0 0 14px ${unit.color}70,0 2px 6px rgba(0,0,0,0.7)`,
-    'cursor:pointer', 'user-select:none', 'backdrop-filter:blur(2px)',
+    `border:3px solid ${unit.color}`, 'border-radius:6px',
+    `background:${unit.color}35`, `color:${unit.color}`,
+    'font-size:17px', 'font-weight:900',
+    `box-shadow:0 0 20px ${unit.color}90,0 0 40px ${unit.color}50,0 3px 8px rgba(0,0,0,0.8)`,
+    'cursor:pointer', 'user-select:none', 'backdrop-filter:blur(3px)',
     'transition:border-color 0.5s,box-shadow 0.5s',
   ].join(';')
   el.dataset.baseColor = unit.color
-  el.style.setProperty('--bs-normal', `0 0 14px ${unit.color}70,0 2px 6px rgba(0,0,0,0.7)`)
-  el.style.setProperty('--bs-pulse',  `0 0 30px ${unit.color},0 0 55px ${unit.color}66,0 2px 6px rgba(0,0,0,0.7)`)
+  el.style.setProperty('--bs-normal', `0 0 20px ${unit.color}90,0 0 40px ${unit.color}50,0 3px 8px rgba(0,0,0,0.8)`)
+  el.style.setProperty('--bs-pulse',  `0 0 35px ${unit.color},0 0 65px ${unit.color}80,0 3px 8px rgba(0,0,0,0.8)`)
   el.textContent = unit.icon
 
-  // label — pinned exactly below the icon square (no gap)
+  // label — tight below the square
   const lbl = document.createElement('div')
   lbl.style.cssText = [
     'position:absolute',
-    'top:37px',                         // 34px height + 3px gap
-    'left:17px',                        // half of 34px
+    `top:${S + 4}px`,
+    `left:${half}px`,
     'transform:translateX(-50%)',
     `color:${unit.color}`,
-    'font-size:9px', 'font-weight:700',
+    'font-size:10px', 'font-weight:800',
     'white-space:nowrap',
-    'text-shadow:0 1px 4px #000,0 0 8px #000',
-    'background:rgba(0,0,0,0.8)',
-    'padding:1px 5px', 'border-radius:3px',
-    'pointer-events:none',
-    'line-height:1.4',
+    'text-shadow:0 1px 4px #000,0 0 10px #000',
+    'background:rgba(0,0,0,0.85)',
+    'padding:2px 6px', 'border-radius:4px',
+    'pointer-events:none', 'line-height:1.4',
   ].join(';')
   lbl.textContent = unit.label
 
   wrap.appendChild(el)
   wrap.appendChild(lbl)
-  return { wrap, el, arrow }
+  return { wrap, el, arrow, ring }
 }
 
 // ── HUD Panel ─────────────────────────────────────────────────────────────────
@@ -245,29 +263,38 @@ function HUDPanel({ phase, visible, onToggle }) {
   )
 }
 
-// ── Phase title card (S02) ────────────────────────────────────────────────────
+// ── Phase title card (S02) — top-left, slides in from left ───────────────────
 function PhaseTitleCard({ phase }) {
   const data = SIM_PHASES[phase]
   const tact = PHASE_TACTICAL[phase]
   return (
-    // inset-0 fills the map container, flex centers the card — no conflicting inline styles
-    <div className="absolute inset-0 flex items-center justify-center z-40 pointer-events-none" dir="rtl">
+    // Positioned top-left of the map area, slides in from left
+    <div className="absolute top-4 left-4 z-40 pointer-events-none" dir="rtl">
       <div
-        className="bg-demo-surface/96 border border-demo-gold/50 rounded-2xl px-8 py-5 text-center shadow-2xl"
+        className="bg-demo-surface/97 border border-demo-gold/55 rounded-2xl shadow-2xl"
         style={{
-          backdropFilter: 'blur(12px)',
-          animation: 'phaseCardIn 3s ease-in-out forwards',
-          maxWidth: '340px',
-          width: 'calc(100% - 48px)',
+          backdropFilter: 'blur(14px)',
+          animation: 'phaseCardIn 7s ease-in-out forwards',
+          width: '260px',
+          padding: '16px 20px',
         }}
       >
-        <div className="text-4xl mb-2 leading-none">{tact?.icon ?? '⚡'}</div>
-        <div className="text-demo-gold font-black text-xl mb-1 leading-tight">{data.longLabel}</div>
-        <div className="text-gray-400 text-sm mb-3">{data.time}</div>
+        {/* header row: icon + phase name */}
+        <div className="flex items-center gap-3 mb-2">
+          <span className="text-3xl leading-none flex-shrink-0">{tact?.icon ?? '⚡'}</span>
+          <div>
+            <div className="text-demo-gold font-black text-base leading-tight">{data.longLabel}</div>
+            <div className="text-gray-400 text-xs mt-0.5">{data.time}</div>
+          </div>
+        </div>
+        {/* tactical details */}
         {tact?.details && (
-          <div className="space-y-1 border-t border-demo-border/60 pt-3">
+          <div className="space-y-1 border-t border-demo-border/50 pt-2.5 mt-2.5">
             {tact.details.map((d, i) => (
-              <div key={i} className="text-gray-300 text-xs leading-relaxed">{d}</div>
+              <div key={i} className="text-gray-300 text-xs leading-relaxed flex items-start gap-1.5">
+                <span className="text-demo-gold/60 flex-shrink-0 mt-0.5">·</span>
+                <span>{d}</span>
+              </div>
             ))}
           </div>
         )}
@@ -496,14 +523,14 @@ export default function Simulation() {
       // ── unit markers ──
       const ph0 = SIM_PHASES[0]
       for (const [unitId, unit] of Object.entries(SIM_UNITS)) {
-        const { wrap, el, arrow } = createUnitEl(unit)
+        const { wrap, el, arrow, ring } = createUnitEl(unit)
         const pos = ph0.units[unitId]
         el.addEventListener('click', () => {
           setUnitInfo(prev => prev?.id === unitId ? null : { ...unit, pos })
         })
         const marker = new maplibregl.Marker({ element: wrap, anchor: 'center' })
           .setLngLat(pos).addTo(map)
-        markersRef.current[unitId] = { marker, el, arrow }
+        markersRef.current[unitId] = { marker, el, arrow, ring }
         trailsRef.current[unitId] = [pos]
       }
 
@@ -559,9 +586,11 @@ export default function Simulation() {
           arrowEl.style.transform = `translateX(-50%) rotate(${b}deg)`
         }
       }
-      if (innerEl) {
+      const ringEl = markersRef.current[unitId]?.ring
+      if (innerEl || ringEl) {
         const isActive = (ACTIVE_UNITS[phase] ?? []).includes(unitId)
-        innerEl.style.animation = isActive ? 'simPulse 1.5s ease-in-out infinite' : ''
+        if (innerEl) innerEl.style.animation = isActive ? 'simPulse 1.4s ease-in-out infinite' : ''
+        if (ringEl)  ringEl.style.animation  = isActive ? 'unitRing 1.8s ease-out infinite' : ''
       }
     }
 
@@ -670,51 +699,68 @@ export default function Simulation() {
       map.getSource('sim-fog')?.setData({ type: 'FeatureCollection', features: fogFeatures })
     } catch (_) {}
 
-    // 8. Helicopter medevac (phase 5 — flies from south of battle area to יעד א׳ + back)
-    //    Start point is within the phase-5 camera view (center [35.233,31.838] zoom 14.5)
+    // 8. Helicopter medevac — very large, unmissable, flies across the battle area
+    //    Phase 5 camera: center [35.233,31.838] zoom 14.5 → visible ~±0.018° lat/lng
+    //    Trajectory: SW corner [35.220,31.827] → יעד א׳ [35.228,31.837] → back
     clearInterval(heliTimer.current)
     if (heliRef.current) { heliRef.current.remove(); heliRef.current = null }
     if (phase === 5) {
-      const heliEl = document.createElement('div')
-      heliEl.style.cssText = [
-        'width:36px', 'height:36px',
+      // Outer wrap — 60×60px
+      const heliWrap = document.createElement('div')
+      heliWrap.style.cssText = 'position:relative;width:60px;height:60px;overflow:visible;z-index:200;'
+
+      const heliBox = document.createElement('div')
+      heliBox.style.cssText = [
+        'position:absolute', 'top:0', 'left:0',
+        'width:60px', 'height:60px',
         'display:flex', 'align-items:center', 'justify-content:center',
-        'font-size:26px',
-        'animation:heliFloat 0.9s ease-in-out infinite',
-        'filter:drop-shadow(0 0 8px rgba(255,255,255,0.7)) drop-shadow(0 0 14px rgba(34,197,94,0.5))',
-        'position:relative',
-        'cursor:default',
+        'font-size:36px',
+        'animation:heliFloat 0.8s ease-in-out infinite',
+        'border:3px solid #22c55e', 'border-radius:50%',
+        'background:rgba(34,197,94,0.2)',
+        'box-shadow:0 0 25px rgba(34,197,94,0.9),0 0 55px rgba(34,197,94,0.5)',
+        'filter:drop-shadow(0 0 10px rgba(255,255,255,0.8))',
       ].join(';')
-      heliEl.textContent = '🚁'
+      heliBox.textContent = '🚁'
 
-      // label
       const heliLbl = document.createElement('div')
-      heliLbl.style.cssText = 'position:absolute;bottom:-13px;left:50%;transform:translateX(-50%);color:#86efac;font-size:8px;font-weight:700;white-space:nowrap;background:rgba(0,0,0,0.8);padding:1px 5px;border-radius:3px;pointer-events:none;'
-      heliLbl.textContent = 'פינוי רפואי'
-      heliEl.appendChild(heliLbl)
+      heliLbl.style.cssText = [
+        'position:absolute', 'top:64px', 'left:30px',
+        'transform:translateX(-50%)',
+        'color:#86efac', 'font-size:10px', 'font-weight:800',
+        'white-space:nowrap', 'text-shadow:0 1px 4px #000',
+        'background:rgba(0,0,0,0.9)', 'padding:2px 7px', 'border-radius:4px',
+        'pointer-events:none',
+      ].join(';')
+      heliLbl.textContent = '🚑 פינוי רפואי'
 
-      // Start SW of battle area — clearly within camera view for phase 5
-      const heliStart  = [35.221, 31.826]
+      heliWrap.appendChild(heliBox)
+      heliWrap.appendChild(heliLbl)
+
+      const heliStart  = [35.220, 31.827]   // SW of scene, within phase-5 view
       const heliTarget = [35.228, 31.837]   // יעד א׳
 
-      const heli = new maplibregl.Marker({ element: heliEl, anchor: 'center' })
+      const heli = new maplibregl.Marker({ element: heliWrap, anchor: 'center' })
         .setLngLat(heliStart).addTo(map)
       heliRef.current = heli
 
-      const STEPS = 22
+      // Animate: 24 steps to target (6.7s), hover 1.5s, 24 steps back
+      const STEPS = 24
       let step = 0
-      let phase2 = false  // return trip
+      let returning = false
+      let hovering = 0
       const intervalId = setInterval(() => {
         if (!heliRef.current) { clearInterval(intervalId); return }
+        if (hovering > 0) { hovering--; return }
         step++
-        if (!phase2 && step <= STEPS) {
+        if (!returning && step <= STEPS) {
           const t = step / STEPS
           heliRef.current.setLngLat([
             heliStart[0] + (heliTarget[0] - heliStart[0]) * t,
             heliStart[1] + (heliTarget[1] - heliStart[1]) * t,
           ])
-          if (step === STEPS) { step = 0; phase2 = true }   // hover at target for 2 ticks then return
-        } else if (phase2 && step <= STEPS) {
+          if (step === STEPS) { hovering = 5; returning = true; step = 0 }
+        } else if (returning && step <= STEPS) {
           const t = step / STEPS
           heliRef.current.setLngLat([
             heliTarget[0] + (heliStart[0] - heliTarget[0]) * t,
@@ -726,45 +772,53 @@ export default function Simulation() {
       heliTimer.current = intervalId
     }
 
-    // 9. Tank / heavy support fire marker (phases 3 + 4)
-    //    Placed distinctly west of the MM marker so it's clearly visible
+    // 9. Tank / fire support — very prominent, fixed visible position, unmissable
+    //    Phases 3+4: placed at a fixed position south of SBF-A, clearly in camera view
+    //    Phase 3 camera center [35.222,31.830] zoom 14.5 — tank at [35.218,31.824]
     if (tankRef.current) { tankRef.current.remove(); tankRef.current = null }
     if (phase === 3 || phase === 4) {
-      // Wrap with explicit sizing so label aligns
       const tankWrap = document.createElement('div')
-      tankWrap.style.cssText = 'position:relative;width:40px;height:40px;overflow:visible;'
+      tankWrap.style.cssText = 'position:relative;width:64px;height:56px;overflow:visible;z-index:200;'
 
-      const tankEl = document.createElement('div')
-      tankEl.style.cssText = [
+      const tankBox = document.createElement('div')
+      tankBox.style.cssText = [
         'position:absolute', 'top:0', 'left:0',
-        'width:40px', 'height:40px',
-        'display:flex', 'align-items:center', 'justify-content:center',
-        'font-size:26px',
-        'border:2px solid #f59e0b', 'border-radius:6px',
-        'background:rgba(245,158,11,0.15)',
-        'box-shadow:0 0 16px rgba(245,158,11,0.7), 0 2px 8px rgba(0,0,0,0.8)',
-        'filter:drop-shadow(0 0 6px rgba(255,165,0,0.9))',
-        phase === 3 ? 'animation:tankFire 0.5s ease-out 4' : '',
+        'width:64px', 'height:56px',
+        'display:flex', 'flex-direction:column',
+        'align-items:center', 'justify-content:center', 'gap:2px',
+        'border:3px solid #f59e0b', 'border-radius:8px',
+        'background:rgba(245,158,11,0.22)',
+        'box-shadow:0 0 28px rgba(245,158,11,1),0 0 55px rgba(245,158,11,0.6)',
+        phase === 3 ? 'animation:tankFire 0.45s ease-out 5' : '',
       ].join(';')
-      tankEl.textContent = '🪖'
+
+      const tankIcon = document.createElement('div')
+      tankIcon.style.cssText = 'font-size:26px;line-height:1;'
+      tankIcon.textContent = '💥'
+
+      const tankText = document.createElement('div')
+      tankText.style.cssText = 'color:#fbbf24;font-size:9px;font-weight:900;line-height:1;letter-spacing:0.5px;'
+      tankText.textContent = 'תמ"ש'
+
+      tankBox.appendChild(tankIcon)
+      tankBox.appendChild(tankText)
 
       const tankLbl = document.createElement('div')
       tankLbl.style.cssText = [
-        'position:absolute', 'top:43px', 'left:20px',
+        'position:absolute', 'top:60px', 'left:32px',
         'transform:translateX(-50%)',
-        'color:#fbbf24', 'font-size:8px', 'font-weight:700',
+        'color:#fbbf24', 'font-size:9px', 'font-weight:800',
         'white-space:nowrap', 'text-shadow:0 1px 3px #000',
-        'background:rgba(0,0,0,0.85)', 'padding:1px 5px', 'border-radius:3px',
+        'background:rgba(0,0,0,0.9)', 'padding:2px 7px', 'border-radius:4px',
         'pointer-events:none',
       ].join(';')
-      tankLbl.textContent = 'תמיכת אש'
+      tankLbl.textContent = 'תמיכת ירי שריון'
 
-      tankWrap.appendChild(tankEl)
+      tankWrap.appendChild(tankBox)
       tankWrap.appendChild(tankLbl)
 
-      // Offset west of MM so it doesn't overlap the MM marker
-      const mmPos = data.units.mm
-      const tankPos = [mmPos[0] - 0.003, mmPos[1] - 0.001]
+      // Fixed position visible in phase 3+4 camera (center ~[35.222,31.830])
+      const tankPos = [35.218, 31.824]
       const tank = new maplibregl.Marker({ element: tankWrap, anchor: 'center' })
         .setLngLat(tankPos).addTo(map)
       tankRef.current = tank
@@ -813,7 +867,7 @@ export default function Simulation() {
   useEffect(() => {
     setCardPhase(phase)
     setShowCard(true)
-    const t = setTimeout(() => setShowCard(false), 3000)
+    const t = setTimeout(() => setShowCard(false), 7000)  // matches animation duration
     return () => clearTimeout(t)
   }, [phase])
 
