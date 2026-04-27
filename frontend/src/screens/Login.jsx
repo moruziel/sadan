@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 const VALID_CODE = '5236521'
@@ -8,10 +8,15 @@ export default function Login() {
   const [code, setCode]     = useState('')
   const [error, setError]   = useState(false)
   const [loading, setLoading] = useState(false)
+  const codeRef = useRef(code)
+
+  // keep ref in sync so the effect closure always reads fresh value
+  useEffect(() => { codeRef.current = code }, [code])
 
   function handleSubmit(e) {
-    e.preventDefault()
-    if (code === VALID_CODE) {
+    e?.preventDefault()
+    const val = codeRef.current
+    if (val === VALID_CODE) {
       setLoading(true)
       setTimeout(() => navigate('/field-selection'), 800)
     } else {
@@ -19,6 +24,28 @@ export default function Login() {
       setTimeout(() => setError(false), 2000)
     }
   }
+
+  // SADAN voice: fill ID + auto-submit
+  useEffect(() => {
+    function onFill(e) {
+      const { field_id, value } = e.detail ?? {}
+      if (field_id !== 'login_id') return
+      setCode(value)
+      codeRef.current = value
+      // slight delay so the user sees the filled field before submit
+      setTimeout(() => handleSubmit(), 600)
+    }
+    function onAction(e) {
+      const { action } = e.detail ?? {}
+      if (action === 'login') handleSubmit()
+    }
+    window.addEventListener('fillField', onFill)
+    window.addEventListener('sadan:action', onAction)
+    return () => {
+      window.removeEventListener('fillField', onFill)
+      window.removeEventListener('sadan:action', onAction)
+    }
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="min-h-screen bg-demo-bg flex flex-col items-center justify-center animate-fade-in" dir="rtl">

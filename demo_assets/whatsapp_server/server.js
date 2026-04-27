@@ -4,7 +4,7 @@ if (process.platform === 'win32') {
   try { require('child_process').execSync('chcp 65001', { stdio: 'ignore' }) } catch (_) {}
 }
 
-const { Client, LocalAuth } = require('whatsapp-web.js')
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js')
 const qrcode        = require('qrcode-terminal')
 const QRCode        = require('qrcode')
 const express       = require('express')
@@ -149,6 +149,40 @@ app.post('/send', async (req, res) => {
     res.json({ ok: true, to: chatId })
   } catch (err) {
     console.error('❌ שגיאה בשליחה:', err.message)
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+// שליחת הודעה עם תמונה — /send-media
+// body: { phone?, message, mediaUrl, caption? }
+app.post('/send-media', async (req, res) => {
+  const { phone = TEST_PHONE, message, mediaUrl, caption } = req.body
+
+  if (!ready) return res.status(503).json({ ok: false, error: 'ווצאפ לא מחובר' })
+  if (!mediaUrl && !message) return res.status(400).json({ ok: false, error: 'חסר mediaUrl או message' })
+
+  try {
+    const clean = phone.replace(/[^0-9]/g, '')
+    let chatId = `${clean}@c.us`
+    try {
+      const numberId = await client.getNumberId(clean)
+      if (numberId) chatId = numberId._serialized
+    } catch (_) {}
+
+    if (mediaUrl) {
+      console.log(`📸 מוריד תמונה: ${mediaUrl}`)
+      const media = await MessageMedia.fromUrl(mediaUrl, { unsafeMime: true })
+      const textCaption = caption || message || ''
+      await client.sendMessage(chatId, media, { caption: textCaption })
+      console.log(`📤 מדיה+טקסט נשלחו ל-${chatId}`)
+    } else {
+      await client.sendMessage(chatId, message)
+      console.log(`📤 טקסט נשלח ל-${chatId}`)
+    }
+
+    res.json({ ok: true, to: chatId })
+  } catch (err) {
+    console.error('❌ שגיאה בשליחת מדיה:', err.message)
     res.status(500).json({ ok: false, error: err.message })
   }
 })

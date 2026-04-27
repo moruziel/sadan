@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
 import Header from '../components/common/Header'
@@ -30,6 +31,16 @@ export default function FieldSelection() {
   function handleSelect(mode) {
     navigate('/area', { state: { mode } })
   }
+
+  // SADAN voice: "בחר שטח מוקצה" → navigate to /area
+  useEffect(() => {
+    function onAction(e) {
+      const { action } = e.detail ?? {}
+      if (action === 'select_field') handleSelect('single')
+    }
+    window.addEventListener('sadan:action', onAction)
+    return () => window.removeEventListener('sadan:action', onAction)
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex flex-col h-screen bg-demo-bg" dir="rtl">

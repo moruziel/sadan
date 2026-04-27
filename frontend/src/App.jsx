@@ -44,7 +44,8 @@ export default function App() {
 }
 
 // On these paths the chat UI is hidden but the component stays mounted (WS alive)
-const NO_CHAT_PATHS = new Set(['/', '/field-selection', '/quiz', '/demo-check'])
+// Keeping only /demo-check hidden — all other screens are voice-navigable
+const NO_CHAT_PATHS = new Set(['/demo-check'])
 
 function SadanChatWrapper() {
   const { pathname } = useLocation()

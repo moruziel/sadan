@@ -1,9 +1,489 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { MessageSquare, ChevronLeft, Mic, MicOff, Volume2, Send, Loader } from 'lucide-react'
+import { sendWhatsAppMedia, sendWhatsApp } from '../../api/whatsapp'
+import { CONTACTS, buildSisoAirforceMessage } from '../../data/contacts'
 
 const API_REST = 'http://localhost:8000/api/voice'
 const WS_URL   = 'ws://localhost:8000/gemini-voice/ws'
 const NUM_BARS = 12
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+function simDispatch(event, detail = {}) {
+  window.dispatchEvent(new CustomEvent(event, { detail }))
+}
+
+// ── פקודות SADAN — טקטיקה + שליטה בסימולציה ─────────────────────────────────
+//
+// כל פקודה: { re, handler }
+// handler(text) → { handled:true, reply:string }
+//
+const SADAN_COMMANDS = [
+
+  // ── ווצאפ לסיסו ────────────────────────────────────────────────────────────
+  {
+    re: /תתקשר לסיסו|שלח לסיסו|שת.?פ חיל.?האוויר|אשר מסוקים|confirm.?heli|call.?siso/i,
+    handler: async () => {
+      const msg = buildSisoAirforceMessage()
+      try { await sendWhatsApp(msg, CONTACTS.siso.wa) } catch (_) {}
+      return {
+        handled: true,
+        reply: `✅ נשלחה הודעה לסיסו (${CONTACTS.siso.phone}) בוואטסאפ.\n\nבקשת אישור שת"פ עם חיל האוויר — מסוק פינוי רפואי לתרגיל 309ה, 05.05.2026.\n\nממתין לתגובה...`,
+      }
+    },
+  },
+
+  // ── תלת מימד ───────────────────────────────────────────────────────────────
+  {
+    re: /תלת.?מימד|3d|הראה.*(תלת|עומק)|תצוגת.?תלת|הפעל.*(3d|תלת)/i,
+    handler: () => {
+      simDispatch('sadan:toggle3d')
+      return {
+        handled: true,
+        reply: `🗺️ עוברת לתצוגת תלת-מימד.\n\nבתצוגה זו ניתן לראות את העומק הטופוגרפי של שטח 309ה — כיפות הבטון, הצלעות, והרמות השולטות.\n\nהכוח המחפה יוצב על הכיפה השולטת לפי עיקרון "שליטה — ירי — מחסה".`,
+      }
+    },
+  },
+
+  // ── כוח מחפה / כוח הרתק ────────────────────────────────────────────────────
+  {
+    re: /כוח.?מחפה|כוח.?מכסה|כיתה.?ב|נמר.?72|רתק|כוח.?תמיכה|sbf/i,
+    handler: () => {
+      simDispatch('sadan:toggle3d') // ensure 3D
+      simDispatch('sadan:sim_focus_unit', { unit_id: 'kitaB' })
+      return {
+        handled: true,
+        reply: `🔭 מתמקדת בכוח המחפה — כיתה ב׳, נמר-72 (רב"ט משה דוד).\n\n📍 עמדת ירי ברתק א׳ (ע.י.ב. א׳):\n• קואורדינטות: 35.228°E / 31.820°N\n• כיפה שולטת מימין לציר — שליטה מלאה על קו הגישה ליעד א׳\n• אזימוט ירי: 010°\n• גבולות ירי: 355°–025°\n\n⚠️ מחסנית בטיחות: כאשר דגל כיתת התק (נמר-71) נכנס לטווח 200 מ׳ מאזור ההשפעה — "נמר-72 חדל" בקשר. ביטול ירי מיידי.`,
+      }
+    },
+  },
+
+  // ── כוח מסתער ──────────────────────────────────────────────────────────────
+  {
+    re: /כוח.?מסתער|כוח.?תוקף|כיתה.?א|נמר.?71|הסתערות.?ראשית/i,
+    handler: () => {
+      simDispatch('sadan:sim_focus_unit', { unit_id: 'kitaA' })
+      return {
+        handled: true,
+        reply: `⚔️ כיתה א׳ — נמר-71 (רב"ט ירדן כהן) — כוח ההסתערות הראשי.\n\n🏃 מסלול ההסתערות על יעד א׳:\n• נקודת פתיחת ירי: [35.221°E / 31.830°N]\n• יעד — בטונדה מערבית: [35.225°E / 31.836°N]\n• מרחק הסתערות: ~750 מ׳\n• זמן הסתערות משוער: 8–12 דקות (בציר מוגן)\n\n🔫 ירי בתנועה: כיתה א׳ מבצעת ירי מהמותן לאורך כל ההסתערות.\n\n⏱️ H+2:30 — רגע פתיחת ההסתערות.`,
+      }
+    },
+  },
+
+  // ── כיתה ג / כוח הסתערות שני ──────────────────────────────────────────────
+  {
+    re: /כיתה.?ג|נמר.?73|הסתערות.?שני|כוח.?ג/i,
+    handler: () => {
+      simDispatch('sadan:sim_focus_unit', { unit_id: 'kitaG' })
+      return {
+        handled: true,
+        reply: `🔀 כיתה ג׳ — נמר-73 (רב"ט דניאל לוי) — כוח גמיש: הסתערות + כיסוי.\n\n📋 תפקיד דואלי:\n• שלבים 3–4: מסתערת יחד עם כיתה א׳ על יעד א׳\n• שלב 5: עוברת לע.י.ב. ב׳ (35.245°E) — כיסוי יעד ב׳\n• שלב 6: כיסוי בזמן כיתות א׳+ב׳ מסתערות על יעד ב׳\n\n📍 ע.י.ב. ב׳: אזימוט 015°, גבולות 000°–030°`,
+      }
+    },
+  },
+
+  // ── מ"מ ────────────────────────────────────────────────────────────────────
+  {
+    re: /מ.?מ|מפקד.?מחלקה|נמר.?7[^0-9]|אברהם.?לוי/i,
+    handler: () => {
+      simDispatch('sadan:sim_focus_unit', { unit_id: 'mm' })
+      return {
+        handled: true,
+        reply: `⭐ מ"מ — נמר-7 (סגן אברהם לוי) — מפקד המחלקה.\n\n📡 תפקיד בתרגיל:\n• שולט בכל הכוחות מנקודת ח.ש. (חוד שליטה)\n• אחראי על פקודת "נמר-72 חדל" — ביטול הרתק\n• תיאום עם קצין בטיחות לאורך כל שלבי הירי\n• אישור כניסה לכל שלב בירי חי\n\n🔑 הפקודות הקריטיות שלו:\n• "נמר-72 חדל" — עצור ירי ברתק\n• "נמר-71 קדימה" — הסתערות\n• "נ-7 ביטחון" — עצור הכל`,
+      }
+    },
+  },
+
+  // ── מחסנית בטיחות ──────────────────────────────────────────────────────────
+  {
+    re: /מחסנית.?בטיח|בטיחות.?ירי|דוצ|כניסה.?לטווח|safety.?dist|cease.?fire/i,
+    handler: () => {
+      simDispatch('sadan:sim_set_phase', { phase: 4 }) // phase 4 = הסתערות — המקום הקריטי
+      return {
+        handled: true,
+        reply: `⚠️ מחסנית בטיחות — עיקרון ורציה (VRAE)\n\n📏 ההגדרה:\nהמרחק המינימלי שבין כיתת ההסתערות המתקדמת לבין אזור נפילת הכדורים של כוח הרתק, שמתחתיו חייבים לחדול ירי.\n\n🛑 בתרגיל זה:\n• מחסנית בטיחות: 200 מ׳\n• כאשר נמר-71 מגיע ל-200 מ׳ מיעד א׳ — המ"מ מבטל "נמר-72 חדל"\n• דגלן כיתת התק נושא דגל אדום — נראה לכוח הרתק\n\n🔴 עברתי לשלב ה׳ — ניתן לראות את המרחק הקריטי בין נמר-71 לנמר-72 בזמן ההסתערות.`,
+      }
+    },
+  },
+
+  // ── מרחק הסתערות ───────────────────────────────────────────────────────────
+  {
+    re: /מרחק.?הסתערות|כמה.?מ.?(הסתערות|קדמה)|כמה.?רחוק|distance/i,
+    handler: () => {
+      simDispatch('sadan:sim_set_phase', { phase: 3 })
+      return {
+        handled: true,
+        reply: `📐 מרחק ההסתערות — יעד א׳ (בטונדה מערבית):\n\n• נקודת מוצא להסתערות (נ.ד. 3): [35.221°E / 31.830°N]\n• יעד א׳: [35.225°E / 31.836°N]\n• מרחק ישיר: ~750 מ׳\n• מסלול בשטח (תוך כדי מחסה): ~900–950 מ׳\n\n📐 מרחק הסתערות — יעד ב׳ (מטרה עיקרית):\n• נ.ד. 4: [35.228°E / 31.837°N]\n• יעד ב׳: [35.241°E / 31.842°N]\n• מרחק: ~1,150 מ׳\n\n⏱️ קצב התקדמות בתרגיל חי: ~80 מ׳/דקה → הסתערות א׳ ≈ 10 דקות.`,
+      }
+    },
+  },
+
+  // ── הסתערות — עבור לשלב 4 ──────────────────────────────────────────────────
+  {
+    re: /הסתערות|מתי.*הסתערות|הצג.*הסתערות|עבור.*הסתערות|^הסתע/i,
+    handler: () => {
+      simDispatch('sadan:sim_set_phase', { phase: 4 })
+      simDispatch('sadan:sim_focus_unit', { unit_id: 'kitaA' })
+      return {
+        handled: true,
+        reply: `⚔️ שלב ה׳ — הסתערות על יעד א׳ (H+2:30)\n\n🔴 כיתות א׳ וג׳ מסתערות על בטונדה מערבית בירי מהמותן.\n🔵 כיתה ב׳ ממשיכה ירי ברתק מע.י.ב. א׳ עד לפקודה.\n\n📋 סדר הפעולות:\n1. מ"מ מוודא כוחות מוכנים בקשר\n2. "נמר-71 קדימה" — כיתה א׳ פותחת בריצה\n3. ירי מהמותן לאורך כל ההסתערות\n4. דגלן מרחק 200 מ׳ → מ"מ: "נמר-72 חדל"\n5. כניסה ליעד, ניקוי, "יעד א׳ בידינו"`,
+      }
+    },
+  },
+
+  // ── ניווט שלבים: כינוס / תנועה / ביסוס / כיסוי / מעבר / נסיגה ────────────
+  {
+    re: /שלב.?כינוס|כינוס|h.?4|התארגנות.?ראשונית/i,
+    handler: () => {
+      simDispatch('sadan:sim_set_phase', { phase: 0 })
+      return { handled: true, reply: `📋 שלב א׳ — כינוס (H-4)\n\nהמחלקה מתכנסת. תדריך 14 סעיפים, בדיקת נשק, חלוקת תחמושת. קצין בטיחות מאשר יציאה.` }
+    },
+  },
+  {
+    re: /שלב.?תנועה|תנועה|h.?2|יוצאים/i,
+    handler: () => {
+      simDispatch('sadan:sim_set_phase', { phase: 1 })
+      return { handled: true, reply: `🚶 שלב ב׳ — תנועה (H-2)\n\nהכוח יוצא לאורך ציר נמר. 2.4 ק"מ. נ.ד. 1 — תחנה דרומית.` }
+    },
+  },
+  {
+    re: /שלב.?ביסוס|ביסוס|h[^+\-]|התפרסות/i,
+    handler: () => {
+      simDispatch('sadan:sim_set_phase', { phase: 2 })
+      return { handled: true, reply: `🗺️ שלב ג׳ — ביסוס (H)\n\nכיתה ב׳ מתפצלת לע.י.ב. א׳. כיתות א׳+ג׳ ממשיכות צפונה. תדר: 46.500 MHz.` }
+    },
+  },
+  {
+    re: /שלב.?כיסוי|ירי.?ברתק|רתק|h\+1/i,
+    handler: () => {
+      simDispatch('sadan:sim_set_phase', { phase: 3 })
+      simDispatch('sadan:sim_focus_unit', { unit_id: 'kitaB' })
+      return { handled: true, reply: `🔥 שלב ד׳ — כיסוי (H+1)\n\nכיתה ב׳ פותחת ירי ברתק. אזימוט 010°, גבולות 355°–025°. כיתות א׳+ג׳ מתקדמות ליעד א׳.` }
+    },
+  },
+  {
+    re: /שלב.?מעבר|מעבר|h\+3[^:]/i,
+    handler: () => {
+      simDispatch('sadan:sim_set_phase', { phase: 5 })
+      return { handled: true, reply: `🔀 שלב ה׳ המשך — מעבר (H+3)\n\nביסוס יעד א׳. כיתה ג׳ עוברת לע.י.ב. ב׳. כיתות א׳+ב׳ מתארגנות ליעד ב׳.` }
+    },
+  },
+  {
+    re: /יעד.?א|בטונדה.?מערבית/i,
+    handler: () => {
+      simDispatch('sadan:sim_set_phase', { phase: 4 })
+      return { handled: true, reply: `🏁 שלב ה׳ — הסתערות יעד א׳ (H+2:30)\n\nבטונדה מערבית. כיתות א׳+ג׳ מסתערות. ביטול ירי בפקודת מ"מ.` }
+    },
+  },
+  {
+    re: /יעד.?ב|בטונדה.?מרכזית|מטרה.?עיקרית/i,
+    handler: () => {
+      simDispatch('sadan:sim_set_phase', { phase: 6 })
+      return { handled: true, reply: `🏆 שלב ה׳ סיום — כיבוש יעד ב׳ (H+3:30)\n\nבטונדה מרכזית — המטרה העיקרית. כיתות א׳+ב׳ מסתערות. כיתה ג׳ מכסה מע.י.ב. ב׳.` }
+    },
+  },
+  {
+    re: /שלב.?נסיגה|נסיגה|חזרה|ביסוס.?סיום/i,
+    handler: () => {
+      simDispatch('sadan:sim_set_phase', { phase: 7 })
+      return { handled: true, reply: `🔙 שלב ו׳ — נסיגה (H+4)\n\nתחקיר ביניים. נסיגה הפוכה לסדר הכניסה. הכוח מתכנס בנ.כ.` }
+    },
+  },
+
+  // ── עמדת ירי ברתק / SBF position ──────────────────────────────────────────
+  {
+    re: /עמדת.?ירי|ע.?י.?ב|sbf.?position|כיפה.?שולטת|עמדת.?רתק/i,
+    handler: () => {
+      simDispatch('sadan:sim_set_phase', { phase: 3 })
+      simDispatch('sadan:sim_focus_unit', { unit_id: 'kitaB' })
+      return {
+        handled: true,
+        reply: `📍 עמדת ירי ברתק — עיקרון ההצבה:\n\n🔑 כלל הבסיס: "ממוקצי כוח מחפה — רתק על כיפה שולטת."\n\n✅ ע.י.ב. א׳ — כיתה ב׳:\n• כיפה שולטת מימין לציר ההתקדמות\n• גובה יתרון: ~15 מ׳ מעל קו ההסתערות\n• שדה ירי נקי על יעד א׳ ויעד ב׳\n• מרחק מהמסתעריםG: 820–1,050 מ׳ (מחוץ לטווח מחסנית בטיחות)\n\n⚠️ עיקרון DoCF:\nהמחפה לא נמצא בקו ירי שמסכן את המסתעריםG. אזימוט ירי 010° — המסתעריםG מתקדמים מדרום (355°–010° = זוית בטוחה בשל גיאוגרפיה).`,
+      }
+    },
+  },
+
+  // ── כלל הסימולציה / הנחה ───────────────────────────────────────────────────
+  {
+    re: /נהל.?סימולציה|שלוט.?בסימולציה|הנחה.?אותי|תנרטב|תסביר.?סימולציה|הסבר.?תרגיל/i,
+    handler: () => {
+      simDispatch('sadan:toggle3d')
+      simDispatch('sadan:sim_set_phase', { phase: 0 })
+      return {
+        handled: true,
+        reply: `🎬 מתחילה ניהול סימולציה — תרגיל מחלקה ב׳, שטח 309ה.\n\nהפעלתי תצוגת תלת-מימד ועברתי לשלב א׳ — כינוס.\n\n📋 מבנה הכוח:\n• נמר-7: מ"מ (מפקד)\n• נמר-71: כיתה א׳ — הסתערות ראשית\n• נמר-72: כיתה ב׳ — ירי ברתק (כיסוי)\n• נמר-73: כיתה ג׳ — הסתערות + כיסוי\n\n💬 תוכל לשאול אותי:\n• "תתמקד על הכוח המחפה"\n• "מרחק ההסתערות"\n• "הסבר מחסנית בטיחות"\n• "עבור לשלב הסתערות"\n• "הצג 3D"\n\nאני שולטת בסימולציה בזמן אמת. 👇`,
+      }
+    },
+  },
+
+  // ── מילוי שדות שאלון ─────────────────────────────────────────────────────
+
+  // כשירות א
+  {
+    re: /כשיר[ות]?\s*(?:דרג[הת]?)?\s*א(?:לף)?(?:\s|$)|מדרג[הת]\s*א(?:\s|$)|רמ[הת]\s*א(?:\s|$)|first.*ready|readiness.*a/i,
+    handler: () => {
+      simDispatch('fillField', { field_id: 'readiness', value: 'aleph' })
+      return { handled: true, reply: '✅ רמת כשירות **א׳** נבחרה בשאלון.\n\nכשיר לחלוטין — כל מסלולי האש פתוחים.' }
+    },
+  },
+  // כשירות ב
+  {
+    re: /כשיר[ות]?\s*(?:דרג[הת]?)?\s*ב(?:ית)?(?:\s|$)|מדרג[הת]\s*ב(?:\s|$)|רמ[הת]\s*ב(?:\s|$)/i,
+    handler: () => {
+      simDispatch('fillField', { field_id: 'readiness', value: 'bet' })
+      return { handled: true, reply: '✅ רמת כשירות **ב׳** נבחרה בשאלון.\n\n⚠️ נדרש קצין מאשר מדרגת סמ"ה ומעלה.' }
+    },
+  },
+  // כשירות ג
+  {
+    re: /כשיר[ות]?\s*(?:דרג[הת]?)?\s*ג(?:ימל)?(?:\s|$)|מדרג[הת]\s*ג(?:\s|$)|רמ[הת]\s*ג(?:\s|$)/i,
+    handler: () => {
+      simDispatch('fillField', { field_id: 'readiness', value: 'gimel' })
+      return { handled: true, reply: '⚠️ כשירות ג׳ — כשירות חלקית.\n\n🚫 אסור לתרגל ירי חי. יש לשדרג לפני תרגיל.' }
+    },
+  },
+  // כשירות ד
+  {
+    re: /כשיר[ות]?\s*(?:דרג[הת]?)?\s*ד(?:לת)?(?:\s|$)|מדרג[הת]\s*ד(?:\s|$)|רמ[הת]\s*ד(?:\s|$)/i,
+    handler: () => {
+      simDispatch('fillField', { field_id: 'readiness', value: 'dalet' })
+      return { handled: true, reply: '🚫 כשירות ד׳ — לא כשיר.\n\nיש לשדרג לפני כל פעילות אש.' }
+    },
+  },
+  // שיטה / נושא — מחלץ את הטקסט אחרי מילת המפתח
+  {
+    re: /(?:שיט[הת]|הנושא|הנוש)\s*(?:שלי\s*)?(?:היא|הוא|:)?\s+(.{4,})/i,
+    handler: (text) => {
+      const m = text.match(/(?:שיט[הת]|הנושא|הנוש)\s*(?:שלי\s*)?(?:היא|הוא|:)?\s+(.{4,})/i)
+      const value = m?.[1]?.trim()
+      if (!value) return { handled: false }
+      simDispatch('fillField', { field_id: 'topic', value })
+      return { handled: true, reply: `✅ שיטה עודכנה בשאלון:\n\n"${value}"` }
+    },
+  },
+
+  // ── תשובות לבוחן ─────────────────────────────────────────────────────────
+  // "שאלה 3 תשובה ב" / "שאלה 3 — ב" / "בשאלה 5 בחרתי ג"
+  {
+    re: /שאל[הת]?\s*(\d)\s*[—\-,\s]*(?:תשוב[הת]|בחרתי|בוחר|ענה)?\s*([אבגד1-4](?:\s|$))/i,
+    handler: (text) => {
+      const m = text.match(/שאל[הת]?\s*(\d)[—\-,\s]*(?:תשוב[הת]|בחרתי|בוחר|ענה)?\s*([אבגד1-4])/i)
+      const qId = parseInt(m?.[1])
+      const ans = m?.[2]?.trim()
+      if (!qId || qId < 1 || qId > 8 || !ans) return { handled: false }
+      const ansMap = { 'א': 0, '1': 0, 'ב': 1, '2': 1, 'ג': 2, '3': 2, 'ד': 3, '4': 3 }
+      const ansIdx = ansMap[ans]
+      if (ansIdx === undefined) return { handled: false }
+      simDispatch('fillField', { field_id: 'answer', question_id: qId, answer_idx: ansIdx })
+      return { handled: true, reply: `✅ שאלה ${qId} — אפשרות ${'אבגד'[ansIdx]} נבחרה.\nתוכל לראות אותה מסומנת בבוחן.` }
+    },
+  },
+
+  // ── גודל סימונים ─────────────────────────────────────────────────────────
+  {
+    re: /הקטן.*(סימון|סמל|מרקר|כוח)|סימונ.*קטנ|קטן.*סימון|smaller.*(marker|unit)/i,
+    handler: () => {
+      simDispatch('sadan:marker_scale', { delta: -0.25 })
+      return { handled: true, reply: '🔽 הקטנתי את סימוני הכוחות — תוואי השטח גלוי יותר עכשיו.' }
+    },
+  },
+  {
+    re: /הגדל.*(סימון|סמל|מרקר|כוח)|סימונ.*גדול|גדול.*סימון|larger.*(marker|unit)/i,
+    handler: () => {
+      simDispatch('sadan:marker_scale', { delta: +0.25 })
+      return { handled: true, reply: '🔼 הגדלתי את סימוני הכוחות.' }
+    },
+  },
+  {
+    re: /סימונ.*רגיל|אפס.*(סימון|גודל)|גודל.*(רגיל|ברירת.?מחדל)|reset.*marker/i,
+    handler: () => {
+      simDispatch('sadan:marker_scale', { scale: 1.0 })
+      return { handled: true, reply: '⚖️ החזרתי את סימוני הכוחות לגודל ברירת המחדל.' }
+    },
+  },
+
+  // ── מסלול לשלב הבא ──────────────────────────────────────────────────────
+  {
+    re: /הבלט.*(מסלול|תנועה)|הצג.*(מסלול|מסל|קו.?תנועה)|מסלול.*(הבא|שלב|כוח)/i,
+    handler: () => {
+      simDispatch('sadan:toggle_route')
+      return {
+        handled: true,
+        reply: `🗺️ מציגה קווי תנועה לשלב הבא — צבע כל קו לפי הכוח:\n• 🔵 כיתה א׳ (נמר-71)\n• 🔵 כיתה ב׳ (נמר-72)\n• 🔵 כיתה ג׳ (נמר-73)\n• 🟡 מ"מ (נמר-7)\n\nנקודה בסוף הקו = מיקום יעד בשלב הבא. לחץ שוב כדי להסתיר.`,
+      }
+    },
+  },
+  {
+    re: /הסתר.*(מסלול|קו.?תנועה)|כבה.*(מסלול)/i,
+    handler: () => {
+      simDispatch('sadan:toggle_route')
+      return { handled: true, reply: '✅ הסתרתי את קווי התנועה.' }
+    },
+  },
+
+  // ── בימוי אויב / OPFOR ───────────────────────────────────────────────────
+  {
+    re: /הבלט.*(אויב|אוייב|opfor|בימוי)|הצג.*(אויב|opfor|בימוי)|איפה.*(אויב|בימוי|מטרה|יעד.*אויב)/i,
+    handler: () => {
+      simDispatch('sadan:toggle_opfor')
+      return {
+        handled: true,
+        reply: `🎯 מבליטה עמדות בימוי האויב:\n\n• 👁 יעד א׳ — בטונדה מערבית [35.225°E / 31.839°N]\n• 👁 יעד ב׳ — בטונדה מרכזית [35.241°E / 31.845°N]\n• 🔭 תצפית צפון — חיישן שזוהה\n• ⚠️ מארב דרום — עמדת ירי\n\nמסמנים אדומים ✕ כבר מסומנים על המפה. OPFOR מחזיק עמדות עד להסתערות.`,
+      }
+    },
+  },
+  {
+    re: /הסתר.*(אויב|opfor|בימוי)|כבה.*(אויב|opfor)/i,
+    handler: () => {
+      simDispatch('sadan:toggle_opfor')
+      return { handled: true, reply: '✅ הסתרתי את סימוני הבימוי.' }
+    },
+  },
+
+  // ── ניווט בין מסכים ─────────────────────────────────────────────────────
+  {
+    re: /עבור.*(כניסה|לוגין|התחבר)|חזור.*כניסה|מסך.?ראשי/i,
+    handler: () => {
+      simDispatch('sadan:navigate', { path: '/' })
+      return { handled: true, reply: '🏠 עוברת למסך הכניסה.' }
+    },
+  },
+  {
+    re: /עבור.*(בחירת.?שטח|בחר.?שטח)|מסך.?שטח(?!.*אש|.*309)/i,
+    handler: () => {
+      simDispatch('sadan:navigate', { path: '/field-selection' })
+      return { handled: true, reply: '📍 עוברת לבחירת שטח אש.' }
+    },
+  },
+  {
+    re: /עבור.*(מפה|שטח.309|area)|פתח.?מפה|הצג.?מפה(?!.*שאלון)/i,
+    handler: () => {
+      simDispatch('sadan:navigate', { path: '/area' })
+      return { handled: true, reply: '🗺️ עוברת למפת השטח — שטח אש 309ה.' }
+    },
+  },
+  {
+    re: /עבור.*(שאלון|הגדרת.?תרגיל)|פתח.?שאלון|מסך.?שאלון/i,
+    handler: () => {
+      simDispatch('sadan:navigate', { path: '/questionnaire' })
+      return { handled: true, reply: '📋 עוברת לשאלון הגדרת התרגיל.' }
+    },
+  },
+  {
+    re: /עבור.*(מתווים|תכניות|plans)|הצג.?מתווים|בחר.?מתווה(?!.*(א|ב|ג))/i,
+    handler: () => {
+      simDispatch('sadan:navigate', { path: '/plans' })
+      return { handled: true, reply: '🗂️ עוברת למסך המתווים — 3 הצעות לתרגיל.' }
+    },
+  },
+  {
+    re: /עבור.*(תיק.?תרגיל|exercise)|פתח.?תיק|מסך.?תיק/i,
+    handler: () => {
+      simDispatch('sadan:navigate', { path: '/exercise' })
+      return { handled: true, reply: '📁 עוברת לתיק התרגיל.' }
+    },
+  },
+  {
+    re: /עבור.*(בוחן|quiz)|פתח.?בוחן|מסך.?בוחן/i,
+    handler: () => {
+      simDispatch('sadan:navigate', { path: '/quiz' })
+      return { handled: true, reply: '📝 עוברת לבוחן הכנה לתרגיל.' }
+    },
+  },
+  {
+    re: /עבור.*(אישורים|approvals)|פתח.?אישורים|מסך.?אישורים/i,
+    handler: () => {
+      simDispatch('sadan:navigate', { path: '/approvals' })
+      return { handled: true, reply: '✅ עוברת למסך האישורים.' }
+    },
+  },
+  {
+    re: /עבור.*(סימולציה|simulation)|פתח.?סימולציה|מסך.?סימולציה/i,
+    handler: () => {
+      simDispatch('sadan:navigate', { path: '/simulation' })
+      return { handled: true, reply: '🎬 עוברת לסימולציה הטקטית.' }
+    },
+  },
+
+  // ── פעולות בכל מסך ────────────────────────────────────────────────────────
+  // כניסה עם קוד אישי
+  {
+    re: /(?:כנס|כניסה|כניסה.?עם|הזן.?קוד|היכנס).*(?:52365|מספר.?אישי|קוד)|^5236521$/i,
+    handler: (text) => {
+      const code = text.match(/\b5\d{6}\b/)?.[0] || '5236521'
+      simDispatch('fillField', { field_id: 'login_id', value: code })
+      return { handled: true, reply: `🔐 מכניסה קוד אישי ${code} ומתחברת למערכת...` }
+    },
+  },
+
+  // בחר שטח מוקצה
+  {
+    re: /בחר.?שטח.?מוקצה|שטח.?309|עבור.?לשטח.?(מוקצה|309)|המשך.?לשטח/i,
+    handler: () => {
+      simDispatch('sadan:action', { action: 'select_field' })
+      return { handled: true, reply: '📍 בוחרת שטח מוקצה — שטח אש 309ה, גולן.' }
+    },
+  },
+
+  // המשך / עבור למתווים (מהשאלון)
+  {
+    re: /המשך.?(לשלב|למתווים|לתוכניות|קדימה)|צור.?מתווים|עבור.?ל?מתווה/i,
+    handler: () => {
+      simDispatch('sadan:action', { action: 'proceed' })
+      return { handled: true, reply: '▶️ ממשיכה לשלב המתווים — מייצרת 3 הצעות לתרגיל...' }
+    },
+  },
+
+  // בחר מתווה א / ב / ג
+  {
+    re: /בחר.?מתווה\s*א(?:לף)?(?:\s|$)|מתווה\s*א(?:לף)?(?:\s|$)|תכנית\s*א(?:\s|$)|plan.?1(?:\s|$)/i,
+    handler: () => {
+      simDispatch('sadan:action', { action: 'select_plan', plan_id: 'plan_1' })
+      return { handled: true, reply: '✅ בחרתי **מתווה א׳** — 9 יעדים, פיצול כיסוי ומאגף. ציון 89.\n\nממשיכה לבניית תיק התרגיל...' }
+    },
+  },
+  {
+    re: /בחר.?מתווה\s*ב(?:ית)?(?:\s|$)|מתווה\s*ב(?:ית)?(?:\s|$)|תכנית\s*ב(?:\s|$)|plan.?2(?:\s|$)/i,
+    handler: () => {
+      simDispatch('sadan:action', { action: 'select_plan', plan_id: 'plan_2' })
+      return { handled: true, reply: '✅ בחרתי **מתווה ב׳** — 5 יעדים, כיבוש ישיר. ציון 76.\n\nממשיכה לבניית תיק התרגיל...' }
+    },
+  },
+  {
+    re: /בחר.?מתווה\s*ג(?:ימל)?(?:\s|$)|מתווה\s*ג(?:ימל)?(?:\s|$)|תכנית\s*ג(?:\s|$)|plan.?3(?:\s|$)/i,
+    handler: () => {
+      simDispatch('sadan:action', { action: 'select_plan', plan_id: 'plan_3' })
+      return { handled: true, reply: '✅ בחרתי **מתווה ג׳** — ניווט לילה, 4 יעדים, ללא ירי חי. ציון 72.\n\nממשיכה לבניית תיק התרגיל...' }
+    },
+  },
+
+  // הגש בוחן
+  {
+    re: /הגש.?בוחן|שלח.?בוחן|שלח.?תשובות|submit.?quiz/i,
+    handler: () => {
+      simDispatch('sadan:action', { action: 'submit_quiz' })
+      return { handled: true, reply: '📤 מגישה את הבוחן לבדיקה...' }
+    },
+  },
+
+  // עבור לאישורים (מהבוחן לאחר מעבר)
+  {
+    re: /עבור.?ל?אישורים|המשך.?ל?אישורים|go.?approvals/i,
+    handler: () => {
+      simDispatch('sadan:action', { action: 'go_approvals' })
+      return { handled: true, reply: '✅ עוברת לסבב האישורים...' }
+    },
+  },
+]
+
+// ── dispatch + match ──────────────────────────────────────────────────────────
+async function handleSadanCommand(text) {
+  for (const cmd of SADAN_COMMANDS) {
+    if (cmd.re.test(text)) {
+      return await cmd.handler(text)
+    }
+  }
+  return { handled: false }
+}
 
 // ── REST fallback for text input ─────────────────────────
 async function apiChatText(text) {
@@ -126,6 +606,7 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
   const messagesEnd       = useRef(null)
   const liveTranscript    = useRef({ user: null, assistant: null })  // { id, accumulated } | null
   const speakingRef       = useRef(false)   // mirrors speaking state — readable from ScriptProcessor closure
+  const sendingRef        = useRef(false)   // synchronous in-flight guard — prevents race condition on double-send
   // Auto-reconnect
   const wantConnected     = useRef(false)   // user intent: true = stay connected
   const reconnectTimer    = useRef(null)
@@ -239,8 +720,15 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
     src.onended = () => {
       activeSources.current = activeSources.current.filter(s => s !== src)
       if (activeSources.current.length === 0) {
-        setSpeaking(false)
-        speakingRef.current = false
+        // ⚠️  DO NOT set speakingRef immediately — the physical speaker still has
+        // ~200-500ms of audio buffered after Web Audio marks the buffer done.
+        // If we re-enable the mic too early, it picks up the tail of SADAN's own
+        // voice, Gemini transcribes it, and SADAN replies to itself (self-echo).
+        // 700ms covers even slow USB audio interfaces.
+        setTimeout(() => {
+          setSpeaking(false)
+          speakingRef.current = false
+        }, 700)
       }
     }
   }
@@ -320,9 +808,13 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
             const msg = JSON.parse(e.data)
             if (msg.type === 'interrupted') {
               stopPlayback()
-              closeLiveTranscripts()  // discard any open partial bubbles
+              closeLiveTranscripts()  // discard any open partial bubbles (user interrupted)
             } else if (msg.type === 'turn_complete') {
-              closeLiveTranscripts()  // ensure open bubbles are always closed
+              // ⚠️  Do NOT call closeLiveTranscripts() here.
+              // Gemini sometimes sends turn_complete BEFORE the final transcript event.
+              // If we null liveTranscript here, the final transcript creates a second
+              // bubble with the same content → duplicate reply visible in chat.
+              // The final transcript (final=true) will close the bubble itself.
             } else if (msg.type === 'transcript') {
               handleTranscript(msg.role, msg.text, msg.final)
             } else if (msg.type === 'whatsapp_sent') {
@@ -402,22 +894,32 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
   const toggleVoice = () => connected ? disconnectVoice() : connectVoice()
 
   // ── Text send ─────────────────────────────────────────
+  // Guard: sendingRef (useRef) instead of `loading` state — prevents race condition
+  // where two rapid calls both pass `if (loading) return` before React re-renders.
   const sendText = useCallback(async (text) => {
-    if (!text.trim() || loading) return
+    if (!text.trim() || sendingRef.current) return
+    sendingRef.current = true   // synchronous — blocks any parallel call immediately
     const trimmed = text.trim()
     setInput('')
     setError(null)
     addMessage('user', trimmed)
     setLoading(true)
     try {
+      // בדוק קודם אם זו פקודה מוכרת (ללא AI round-trip)
+      const cmd = await handleSadanCommand(trimmed)
+      if (cmd.handled) {
+        addMessage('assistant', cmd.reply)
+        return
+      }
       const data = await apiChatText(trimmed)
       addMessage('assistant', data.reply)
     } catch (e) {
       setError('שגיאה בתקשורת עם השרת')
     } finally {
+      sendingRef.current = false
       setLoading(false)
     }
-  }, [loading])
+  }, [])  // empty deps — guard is now a ref, not state
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(input) }

@@ -174,7 +174,7 @@ function SadanChat({ onOpenTab }) {
 }
 
 // ── כרטיס שאלה ───────────────────────────────────────────
-function QuestionCard({ q, selected, submitted, onSelect, onInfo }) {
+function QuestionCard({ q, selected, submitted, onSelect, onInfo, sadanFlash }) {
   const isAnswered = selected !== undefined
   const isCorrect  = submitted && selected === q.correct
   const isWrong    = submitted && isAnswered && selected !== q.correct
@@ -223,15 +223,21 @@ function QuestionCard({ q, selected, submitted, onSelect, onInfo }) {
               key={idx}
               onClick={() => !locked && onSelect(q.id, idx)}
               disabled={locked}
-              className={`flex-1 min-h-0 text-right px-3 rounded-lg border font-semibold text-base transition-all leading-tight
+              className={`relative flex-1 min-h-0 text-right px-3 rounded-lg border font-semibold text-base transition-all leading-tight
                 ${isRight  ? 'bg-green-500/20 border-green-400 text-green-200' : ''}
                 ${isBad    ? 'bg-red-500/20   border-red-400   text-red-200'   : ''}
                 ${isNeutral && isSel && !submitted ? 'bg-demo-gold/10 border-demo-gold text-white' : ''}
                 ${isNeutral && !isSel ? 'border-demo-border/50 text-gray-300 hover:border-gray-400 hover:text-white' : ''}
                 ${isNeutral && isSel && submitted ? 'border-demo-border/50 text-gray-300' : ''}
+                ${sadanFlash && isSel ? 'ring-2 ring-demo-gold ring-offset-1 ring-offset-demo-bg' : ''}
                 ${locked ? 'cursor-default' : 'cursor-pointer'}
               `}
             >
+              {sadanFlash && isSel && (
+                <span className="absolute -top-2 left-2 bg-demo-gold text-black text-[9px] font-black px-1.5 py-0.5 rounded-full shadow animate-bounce">
+                  ✓ סדן
+                </span>
+              )}
               {opt}
             </button>
           )
@@ -366,9 +372,45 @@ export default function Quiz() {
 
   // שחזור מצב מ-localStorage (למקרה שחזרנו מהתיק דרך כפתור אינפו)
   const saved = loadSaved()
-  const [answers,   setAnswers]   = useState(saved?.answers   || {})
-  const [submitted, setSubmitted] = useState(saved?.submitted || false)
-  const [openDone,  setOpenDone]  = useState(saved?.openDone  || false)
+  const [answers,     setAnswers]     = useState(saved?.answers   || {})
+  const [submitted,   setSubmitted]   = useState(saved?.submitted || false)
+  const [openDone,    setOpenDone]    = useState(saved?.openDone  || false)
+  const [sadanFilled, setSadanFilled] = useState({})   // { questionId: true } — gold flash
+  const flashTimers = useRef({})
+
+  // SADAN voice → fill answer
+  useEffect(() => {
+    function onFill(e) {
+      const { field_id, question_id, answer_idx } = e.detail ?? {}
+      if (field_id !== 'answer' || !question_id || answer_idx === undefined) return
+      selectAnswer(question_id, answer_idx)
+      setSadanFilled(p => ({ ...p, [question_id]: true }))
+      clearTimeout(flashTimers.current[question_id])
+      flashTimers.current[question_id] = setTimeout(() =>
+        setSadanFilled(p => { const n = { ...p }; delete n[question_id]; return n }), 1800)
+    }
+    window.addEventListener('fillField', onFill)
+    return () => window.removeEventListener('fillField', onFill)
+  }, [])
+
+  // SADAN voice → submit quiz / go to approvals
+  useEffect(() => {
+    function onAction(e) {
+      const { action } = e.detail ?? {}
+      if (action === 'submit_quiz') {
+        // read fresh answers from localStorage / state via ref
+        setAnswers(prev => {
+          const allDone = QUIZ_QUESTIONS.every(q => prev[q.id] !== undefined)
+          if (allDone) setSubmitted(true)
+          return prev
+        })
+      } else if (action === 'go_approvals') {
+        goToApprovals()
+      }
+    }
+    window.addEventListener('sadan:action', onAction)
+    return () => window.removeEventListener('sadan:action', onAction)
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // שמירה אוטומטית לכל שינוי מצב
   useEffect(() => {
@@ -445,13 +487,15 @@ export default function Quiz() {
             <div className="grid grid-rows-4 gap-2 min-h-0">
               {col1.map(q => (
                 <QuestionCard key={q.id} q={q} selected={answers[q.id]}
-                  submitted={submitted} onSelect={selectAnswer} onInfo={handleInfoClick} />
+                  submitted={submitted} onSelect={selectAnswer} onInfo={handleInfoClick}
+                  sadanFlash={!!sadanFilled[q.id]} />
               ))}
             </div>
             <div className="grid grid-rows-4 gap-2 min-h-0">
               {col2.map(q => (
                 <QuestionCard key={q.id} q={q} selected={answers[q.id]}
-                  submitted={submitted} onSelect={selectAnswer} onInfo={handleInfoClick} />
+                  submitted={submitted} onSelect={selectAnswer} onInfo={handleInfoClick}
+                  sadanFlash={!!sadanFilled[q.id]} />
               ))}
             </div>
           </div>

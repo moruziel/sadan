@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle, ChevronLeft, Plus, X } from 'lucide-react'
 import Header from '../components/common/Header'
@@ -58,6 +58,45 @@ export default function Questionnaire() {
   const [showDropdown,   setShowDropdown]   = useState(false)
   const [sadanDismissed, setSadanDismissed] = useState(false)
   const [sadanAccepted,  setSadanAccepted]  = useState(false)
+  const [sadanFilled,    setSadanFilled]    = useState({})   // { fieldId: true } — brief gold flash
+  const flashTimers = useRef({})
+
+  // ── SADAN voice fill ──────────────────────────────────────────────────────
+  useEffect(() => {
+    function flash(key) {
+      setSadanFilled(p => ({ ...p, [key]: true }))
+      clearTimeout(flashTimers.current[key])
+      flashTimers.current[key] = setTimeout(() =>
+        setSadanFilled(p => { const n = { ...p }; delete n[key]; return n }), 1800)
+    }
+    function onFill(e) {
+      const { field_id, value } = e.detail ?? {}
+      if (!field_id) return
+      if (field_id === 'readiness') { set('readiness', value); flash('readiness') }
+      else if (['topic','objective','ammo','date','forceSize','composition'].includes(field_id)) {
+        set(field_id, value); flash(field_id)
+      }
+    }
+    window.addEventListener('fillField', onFill)
+    return () => window.removeEventListener('fillField', onFill)
+  }, [])
+
+  // SADAN voice: "המשך" / "עבור למתווים" → navigate to /plans if canProceed
+  useEffect(() => {
+    function onAction(e) {
+      const { action } = e.detail ?? {}
+      if (action === 'proceed') {
+        // read canProceed from current form state
+        setForm(prev => {
+          const bl = prev.readiness && READINESS_LEVELS.find(r => r.value === prev.readiness)?.blocked
+          if (prev.readiness && !bl && prev.topic) navigate('/plans')
+          return prev
+        })
+      }
+    }
+    window.addEventListener('sadan:action', onAction)
+    return () => window.removeEventListener('sadan:action', onAction)
+  }, [navigate])
 
   // האם תרגיל רטוב?
   const isWet = form.firingCond === 'רטוב'
@@ -121,12 +160,19 @@ export default function Questionnaire() {
             </Field>
 
             <Field label="שיטה">
-              <input
-                value={form.topic}
-                onChange={e => set('topic', e.target.value)}
-                placeholder="לדוגמה: ניווט לילי עד לאיתור בשטח בנוי"
-                className={inputCls}
-              />
+              <div className="relative">
+                <input
+                  value={form.topic}
+                  onChange={e => set('topic', e.target.value)}
+                  placeholder="לדוגמה: ניווט לילי עד לאיתור בשטח בנוי"
+                  className={`${inputCls} ${sadanFilled.topic ? 'border-demo-gold ring-1 ring-demo-gold/40' : ''}`}
+                />
+                {sadanFilled.topic && (
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 bg-demo-gold text-black text-[9px] font-black px-2 py-0.5 rounded-full shadow">
+                    ✓ סדן
+                  </span>
+                )}
+              </div>
             </Field>
 
             <Field label="שטח">
@@ -237,8 +283,14 @@ export default function Questionnaire() {
                           : 'border-demo-gold bg-demo-gold/10 text-demo-gold'
                         : 'border-demo-border bg-demo-card text-gray-400 hover:border-gray-500'
                       }
+                      ${sadanFilled.readiness && form.readiness === r.value ? 'ring-2 ring-demo-gold ring-offset-2 ring-offset-demo-bg' : ''}
                     `}
                   >
+                    {sadanFilled.readiness && form.readiness === r.value && (
+                      <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-demo-gold text-black text-[9px] font-black px-2 py-0.5 rounded-full whitespace-nowrap z-10 shadow-lg animate-bounce">
+                        ✓ סדן
+                      </span>
+                    )}
                     {r.blocked && (
                       <span className="absolute top-2 right-2 text-demo-danger"><AlertCircle size={14} /></span>
                     )}

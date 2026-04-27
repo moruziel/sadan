@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { ChevronLeft, ChevronRight, Play, Pause, RotateCcw, Crosshair, Volume2, VolumeX, Radio } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Play, Pause, RotateCcw, Crosshair, Volume2, VolumeX, Radio, Layers } from 'lucide-react'
 import { AREA_309 } from '../data/mockData'
 import { SIM_UNITS, SIM_PHASES } from '../data/simulationData'
 import useSimulation from '../hooks/useSimulation'
@@ -108,6 +108,14 @@ function fireCone(origin,left,right,dist=0.8){
   return {type:'Feature',geometry:{type:'Polygon',coordinates:[pts]},properties:{}}
 }
 
+// ── OPFOR positions — בימוי אויב ─────────────────────────────────────────────
+const OPFOR_POSITIONS = [
+  { id:'opfor-a', coords:[35.225, 31.839], label:'יעד א׳ — אויב',    icon:'👁', phases:[1,2,3,4] },
+  { id:'opfor-b', coords:[35.241, 31.845], label:'יעד ב׳ — אויב',   icon:'👁', phases:[1,2,3,4,5,6] },
+  { id:'opfor-ob1', coords:[35.231, 31.833], label:'תצפית צפון',    icon:'🔭', phases:[0,1,2,3] },
+  { id:'opfor-ob2', coords:[35.218, 31.815], label:'מארב דרום',     icon:'⚠️', phases:[1,2] },
+]
+
 // ── fire sector cones per phase ───────────────────────────────────────────────
 const FIRE_CONES_DATA = {
   3: [fireCone([35.228,31.820],355,25,0.85)],
@@ -117,71 +125,123 @@ const FIRE_CONES_DATA = {
 }
 
 // ── unit marker — NO transition:transform (MapLibre owns that property) ───────
+// Solid, aggressive design: always visible regardless of map background
 function createUnitEl(unit) {
-  const S = 48  // marker size px
+  const S = 64   // icon square size — big enough to be unmissable
 
-  // wrap: MapLibre controls transform — NO CSS transition here
+  // wrap: MapLibre controls transform — ZERO CSS transition on this element
+  // z-index:1000 creates a stacking context above all map UI elements
   const wrap = document.createElement('div')
-  wrap.style.cssText = `width:${S}px;height:${S}px;position:relative;overflow:visible;`
+  wrap.style.cssText = [
+    'position:relative','overflow:visible',
+    `width:${S}px`,`height:${S}px`,
+    'z-index:1000',
+  ].join(';')
 
-  // sonar-ping ring (child element — CSS animation fine here, not transform)
+  // inner: visual container — we scale THIS, not wrap (MapLibre owns wrap.style.transform)
+  const inner = document.createElement('div')
+  inner.id = `sim-inner-${unit.id}`
+  inner.style.cssText = [
+    'position:absolute','top:0','left:0',
+    `width:${S}px`,`height:${S}px`,
+    'overflow:visible',
+    `transform-origin:${S/2}px ${S/2}px`,   // scale from icon center
+    'transition:transform 0.3s ease',
+  ].join(';')
+
+  // sonar-ping ring — child-level CSS animation OK here
   const ring = document.createElement('div')
   ring.id = `sim-ring-${unit.id}`
   ring.style.cssText = [
-    'position:absolute',`top:${S/2}px`,`left:${S/2}px`,
-    `width:${S+20}px`,`height:${S+20}px`,
+    'position:absolute',
+    `top:${S/2}px`,`left:${S/2}px`,
+    `width:${S+32}px`,`height:${S+32}px`,
     'border-radius:50%',
     `border:3px solid ${unit.color}`,
     'transform:translate(-50%,-50%) scale(0.7)',
     'opacity:0','pointer-events:none',
   ].join(';')
-  wrap.appendChild(ring)
+  inner.appendChild(ring)
 
-  // direction arrow
+  // direction arrow — above the square
   const arrow = document.createElement('div')
   arrow.id = `sim-arrow-${unit.id}`
   arrow.style.cssText = [
-    'position:absolute',`top:-17px`,`left:${S/2}px`,
+    'position:absolute','top:-22px',`left:${S/2}px`,
     'transform:translateX(-50%) rotate(0deg)',
     'width:0','height:0',
-    'border-left:7px solid transparent','border-right:7px solid transparent',
-    `border-bottom:14px solid ${unit.color}`,
-    'opacity:0.9','transition:transform 1.8s ease','pointer-events:none',
+    'border-left:9px solid transparent','border-right:9px solid transparent',
+    `border-bottom:18px solid ${unit.color}`,
+    'opacity:1','transition:transform 1.8s ease','pointer-events:none',
+    `filter:drop-shadow(0 0 4px ${unit.color})`,
   ].join(';')
-  wrap.appendChild(arrow)
+  inner.appendChild(arrow)
 
-  // icon square — visual animations (glow pulse) are fine on this child
+  // ── icon square — SOLID background, always visible ──────────────────────
   const el = document.createElement('div')
   el.id = `sim-unit-${unit.id}`
   el.style.cssText = [
+    'position:absolute','top:0','left:0',
     `width:${S}px`,`height:${S}px`,
     'display:flex','align-items:center','justify-content:center',
-    `border:3px solid ${unit.color}`,'border-radius:7px',
-    `background:${unit.color}40`,`color:${unit.color}`,
-    'font-size:18px','font-weight:900',
-    `box-shadow:0 0 22px ${unit.color},0 0 45px ${unit.color}70,0 4px 10px rgba(0,0,0,0.9)`,
-    'cursor:pointer','user-select:none','backdrop-filter:blur(4px)',
-    'position:absolute','top:0','left:0',
+    `border:4px solid ${unit.color}`,'border-radius:10px',
+    'background:#0a0f16',          // solid dark — visible on ANY map tile color
+    `color:${unit.color}`,
+    'font-size:26px','font-weight:900',
+    // outer glow: unit color; inner shadow: dark edge
+    `box-shadow:0 0 0 2px #0a0f16, 0 0 30px ${unit.color}, 0 0 65px ${unit.color}99, 0 6px 20px rgba(0,0,0,0.98)`,
+    'cursor:pointer','user-select:none',
   ].join(';')
-  el.style.setProperty('--bs-normal',`0 0 22px ${unit.color},0 0 45px ${unit.color}70,0 4px 10px rgba(0,0,0,0.9)`)
-  el.style.setProperty('--bs-pulse', `0 0 40px ${unit.color},0 0 80px ${unit.color}90,0 4px 10px rgba(0,0,0,0.9)`)
+  el.style.setProperty('--bs-normal', `0 0 0 2px #0a0f16, 0 0 30px ${unit.color}, 0 0 65px ${unit.color}99, 0 6px 20px rgba(0,0,0,0.98)`)
+  el.style.setProperty('--bs-pulse',  `0 0 0 2px #0a0f16, 0 0 55px ${unit.color}, 0 0 100px ${unit.color}, 0 6px 20px rgba(0,0,0,0.98)`)
   el.textContent = unit.icon
 
-  // label
-  const lbl = document.createElement('div')
-  lbl.style.cssText = [
-    'position:absolute',`top:${S+5}px`,`left:${S/2}px`,
+  // ── info banner — callsign + live role/status ────────────────────────────
+  const banner = document.createElement('div')
+  banner.id = `sim-banner-${unit.id}`
+  banner.style.cssText = [
+    'position:absolute',
+    `top:${S + 7}px`,
+    `left:${S / 2}px`,
     'transform:translateX(-50%)',
-    `color:${unit.color}`,'font-size:11px','font-weight:900',
-    'white-space:nowrap','text-shadow:0 1px 5px #000,0 0 12px #000',
-    'background:rgba(0,0,0,0.9)','padding:2px 7px','border-radius:4px',
-    'pointer-events:none','line-height:1.5',
+    'min-width:115px',
+    'background:#000000dd',
+    `border:2px solid ${unit.color}`,
+    'border-radius:6px',
+    'padding:4px 8px 5px 8px',
+    'text-align:center',
+    'pointer-events:none',
+    `box-shadow:0 0 14px ${unit.color}80,0 4px 12px rgba(0,0,0,0.95)`,
+    'white-space:nowrap',
   ].join(';')
-  lbl.textContent = unit.label
 
-  wrap.appendChild(el)
-  wrap.appendChild(lbl)
-  return { wrap, el, arrow, ring }
+  const callsignEl = document.createElement('div')
+  callsignEl.style.cssText = `color:${unit.color};font-size:12px;font-weight:900;line-height:1.3;text-shadow:0 0 8px ${unit.color};letter-spacing:0.5px;`
+  callsignEl.textContent = unit.callsign
+
+  const labelEl = document.createElement('div')
+  labelEl.style.cssText = `color:#e5e7eb;font-size:10px;font-weight:700;line-height:1.3;margin-top:1px;`
+  labelEl.textContent = unit.label     // כיתה א׳ / מ"מ etc.
+
+  const roleEl = document.createElement('div')
+  roleEl.id = `sim-role-${unit.id}`
+  roleEl.style.cssText = `color:#9ca3af;font-size:9px;font-weight:600;line-height:1.3;margin-top:1px;`
+  roleEl.textContent = unit.role
+
+  // colored status strip
+  const statusBar = document.createElement('div')
+  statusBar.id = `sim-status-${unit.id}`
+  statusBar.style.cssText = `height:4px;border-radius:3px;margin-top:4px;background:#374151;transition:background 0.4s;`
+
+  banner.appendChild(callsignEl)
+  banner.appendChild(labelEl)
+  banner.appendChild(roleEl)
+  banner.appendChild(statusBar)
+
+  inner.appendChild(el)
+  inner.appendChild(banner)
+  wrap.appendChild(inner)
+  return { wrap, inner, el, arrow, ring, roleEl, statusBar }
 }
 
 // ── HUD Panel ─────────────────────────────────────────────────────────────────
@@ -229,22 +289,29 @@ function PhaseTitleCard({ phase }) {
   const tact = PHASE_TACTICAL[phase]
   return (
     <div className="absolute top-4 left-4 z-40 pointer-events-none" dir="rtl">
-      <div className="bg-demo-surface/97 border border-demo-gold/55 rounded-2xl shadow-2xl"
-        style={{ backdropFilter:'blur(14px)', animation:'phaseCardIn 7s ease-in-out forwards',
-                 width:'260px', padding:'16px 20px' }}>
+      {/* רקע שחור מלא — ללא backdrop-filter כדי שהמפה הבהירה לא תדלוף פנימה */}
+      <div style={{
+        background: '#000000f2',
+        border: '2px solid #c6953b',
+        borderRadius: '16px',
+        boxShadow: '0 0 0 1px #000, 0 8px 32px rgba(0,0,0,0.95), 0 0 20px rgba(198,149,59,0.25)',
+        animation: 'phaseCardIn 7s ease-in-out forwards',
+        width: '270px',
+        padding: '16px 20px',
+      }}>
         <div className="flex items-center gap-3 mb-2">
           <span className="text-3xl leading-none flex-shrink-0">{tact?.icon ?? '⚡'}</span>
           <div>
-            <div className="text-demo-gold font-black text-base leading-tight">{data.longLabel}</div>
-            <div className="text-gray-400 text-xs mt-0.5">{data.time}</div>
+            <div style={{ color:'#c6953b', fontWeight:900, fontSize:'15px', lineHeight:1.3, textShadow:'0 1px 6px #000' }}>{data.longLabel}</div>
+            <div style={{ color:'#9ca3af', fontSize:'11px', marginTop:'2px', fontWeight:700 }}>{data.time}</div>
           </div>
         </div>
         {tact?.details && (
-          <div className="space-y-1 border-t border-demo-border/50 pt-2.5 mt-2.5">
+          <div style={{ borderTop:'1px solid #374151', paddingTop:'10px', marginTop:'10px', display:'flex', flexDirection:'column', gap:'6px' }}>
             {tact.details.map((d, i) => (
-              <div key={i} className="text-gray-300 text-xs leading-relaxed flex items-start gap-1.5">
-                <span className="text-demo-gold/60 flex-shrink-0 mt-0.5">·</span>
-                <span>{d}</span>
+              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:'8px' }}>
+                <span style={{ color:'#c6953b', flexShrink:0, marginTop:'1px', fontWeight:900 }}>·</span>
+                <span style={{ color:'#f3f4f6', fontSize:'12px', lineHeight:1.5, fontWeight:600, textShadow:'0 1px 4px #000' }}>{d}</span>
               </div>
             ))}
           </div>
@@ -291,12 +358,18 @@ export default function Simulation() {
   const cinRef      = useRef(null)        // cinematic rotation interval
   const capturedRef = useRef(new Set())
 
-  const [mapReady,   setMapReady]   = useState(false)
-  const [unitInfo,   setUnitInfo]   = useState(null)
-  const [hudVisible, setHudVisible] = useState(true)
-  const [ttsEnabled, setTtsEnabled] = useState(false)
-  const [showCard,   setShowCard]   = useState(false)
-  const [cardPhase,  setCardPhase]  = useState(0)
+  const [mapReady,        setMapReady]        = useState(false)
+  const [unitInfo,        setUnitInfo]        = useState(null)
+  const [hudVisible,      setHudVisible]      = useState(true)
+  const [ttsEnabled,      setTtsEnabled]      = useState(false)
+  const [showCard,        setShowCard]        = useState(false)
+  const [cardPhase,       setCardPhase]       = useState(0)
+  const [is3d,            setIs3d]            = useState(true)
+  const [markerScale,     setMarkerScale]     = useState(1.0)   // 0.4 – 1.6
+  const [showNextRoute,   setShowNextRoute]   = useState(false) // highlight next-phase movement lines
+  const [opforHighlight,  setOpforHighlight]  = useState(false) // highlight OPFOR positions
+
+  const opforElemsRef = useRef({})  // id → DOM element
 
   const sim = useSimulation()
   const { phase, playing, currentData, total, togglePlay, nextPhase, prevPhase, gotoPhase, pause } = sim
@@ -356,6 +429,15 @@ export default function Simulation() {
       map.addSource('sim-fog',{type:'geojson',data:{type:'FeatureCollection',features:[]}})
       map.addLayer({id:'sim-fog-fill',type:'fill',source:'sim-fog',paint:{'fill-color':'#1f2937','fill-opacity':0.45}})
 
+      // next-phase movement routes (toggled by showNextRoute)
+      map.addSource('sim-next-routes',{type:'geojson',data:{type:'FeatureCollection',features:[]}})
+      map.addLayer({id:'sim-next-route-lines',type:'line',source:'sim-next-routes',
+        paint:{'line-color':['get','color'],'line-width':3.5,'line-opacity':0.9,'line-dasharray':[8,4]}})
+      map.addLayer({id:'sim-next-route-pts',type:'circle',source:'sim-next-routes',
+        filter:['==',['get','type'],'endpoint'],
+        paint:{'circle-radius':7,'circle-color':['get','color'],'circle-opacity':0.9,
+               'circle-stroke-width':2,'circle-stroke-color':'#000'}})
+
       // static markers
       AREA_309.geojson.features.forEach(feat => {
         if(feat.geometry.type!=='Point') return
@@ -400,19 +482,60 @@ export default function Simulation() {
         }
       })
 
+      // ── OPFOR markers (בימוי אויב) — initially semi-transparent ─────────────
+      OPFOR_POSITIONS.forEach(op => {
+        const wrap = document.createElement('div')
+        wrap.style.cssText = 'position:relative;width:44px;height:44px;overflow:visible;'
+
+        const el = document.createElement('div')
+        el.id = `sim-opfor-${op.id}`
+        el.style.cssText = [
+          'width:44px','height:44px',
+          'display:flex','align-items:center','justify-content:center',
+          'font-size:20px',
+          'border:3px solid #ef4444','border-radius:8px',
+          'background:rgba(239,68,68,0.18)',
+          'box-shadow:0 0 20px rgba(239,68,68,0.7)',
+          'transition:opacity 0.4s,transform 0.4s',
+          'opacity:0.28','transform:scale(0.7)',   // dim by default
+          'cursor:default',
+        ].join(';')
+        el.textContent = op.icon
+
+        const lbl = document.createElement('div')
+        lbl.style.cssText = [
+          'position:absolute','top:48px','left:22px',
+          'transform:translateX(-50%)',
+          'color:#fca5a5','font-size:9px','font-weight:700','white-space:nowrap',
+          'text-shadow:0 1px 3px #000',
+          'background:rgba(0,0,0,0.85)','padding:1px 5px','border-radius:3px',
+          'transition:opacity 0.4s','opacity:0.3',
+          'pointer-events:none',
+        ].join(';')
+        lbl.id = `sim-opfor-lbl-${op.id}`
+        lbl.textContent = op.label
+
+        wrap.appendChild(el); wrap.appendChild(lbl)
+        new maplibregl.Marker({ element: wrap, anchor: 'center' }).setLngLat(op.coords).addTo(map)
+        opforElemsRef.current[op.id] = { el, lbl }
+      })
+
       // ── unit markers — no CSS transition, coord-animation drives movement ──
+      console.log('[SIM] map loaded — creating unit markers')
       for (const [unitId, unit] of Object.entries(SIM_UNITS)) {
-        const { wrap, el, arrow, ring } = createUnitEl(unit)
+        const { wrap, el, arrow, ring, roleEl, statusBar } = createUnitEl(unit)
         const pos = SIM_PHASES[0].units[unitId]
+        console.log(`[SIM] adding marker ${unitId} at`, pos)
         el.addEventListener('click', () => {
           setUnitInfo(prev => prev?.id===unitId ? null : { ...unit, pos })
         })
         const marker = new maplibregl.Marker({ element: wrap, anchor: 'center' })
           .setLngLat(pos).addTo(map)
-        markersRef.current[unitId]  = { marker, el, arrow, ring }
+        markersRef.current[unitId]  = { marker, el, arrow, ring, roleEl, statusBar }
         prevPosRef.current[unitId]  = pos
         trailsRef.current[unitId]   = [pos]
       }
+      console.log('[SIM] all markers added, markersRef:', Object.keys(markersRef.current))
 
       setMapReady(true)
     })
@@ -426,12 +549,31 @@ export default function Simulation() {
       else if(action==='rotate') m.flyTo({bearing:p.bearing,pitch:p.pitch>=0?p.pitch:m.getPitch(),duration:1000,essential:true})
     }
     const onToggle3d = () => { const m=mapRef.current; if(!m)return; m.flyTo({pitch:m.getPitch()>10?0:55,duration:900,essential:true}) }
-    window.addEventListener('sadan:map_command',onMapCmd)
-    window.addEventListener('sadan:toggle3d',onToggle3d)
+
+    // SADAN simulation control — set phase from chat
+    const onSetPhase = e => {
+      const p = Number(e.detail?.phase)
+      if (isNaN(p) || p < 0 || p > 7) return
+      setPhase(p)
+    }
+    // SADAN focus unit — pan camera to a specific unit in current phase
+    const onFocusUnit = e => {
+      const uid = e.detail?.unit_id
+      const m = mapRef.current
+      if (!uid || !m) return
+      window.dispatchEvent(new CustomEvent('sadan:sim_show_unit', { detail: { unit_id: uid } }))
+    }
+
+    window.addEventListener('sadan:map_command', onMapCmd)
+    window.addEventListener('sadan:toggle3d', onToggle3d)
+    window.addEventListener('sadan:sim_set_phase', onSetPhase)
+    window.addEventListener('sadan:sim_focus_unit', onFocusUnit)
 
     return () => {
-      window.removeEventListener('sadan:map_command',onMapCmd)
-      window.removeEventListener('sadan:toggle3d',onToggle3d)
+      window.removeEventListener('sadan:map_command', onMapCmd)
+      window.removeEventListener('sadan:toggle3d', onToggle3d)
+      window.removeEventListener('sadan:sim_set_phase', onSetPhase)
+      window.removeEventListener('sadan:sim_focus_unit', onFocusUnit)
       cancelAnimationFrame(rafRef.current)
       clearInterval(heliTimer.current)
       clearInterval(cinRef.current)
@@ -459,31 +601,35 @@ export default function Simulation() {
       const innerEl = markersRef.current[unitId]?.el
       const ringEl  = markersRef.current[unitId]?.ring
 
-      // start coordinate animation (smooth geographic movement)
+      // start coordinate animation — 500ms delay so camera move is visible first
       if (marker) {
-        unitRafsRef.current[unitId] = animateMarkerTo(
-          marker, fromPos, toPos, 2200,
-          // on done: update trail + prevPos
-          () => {
-            prevPosRef.current[unitId] = toPos
-            const trail = trailsRef.current[unitId]
-            trail.push(toPos)
-            if (trail.length > 5) trail.shift()
-            // update trail layer
-            if (mapRef.current) {
-              try {
-                const features = Object.entries(trailsRef.current)
-                  .filter(([_,pts])=>pts.length>=2)
-                  .map(([id,pts])=>({
-                    type:'Feature',
-                    properties:{color:SIM_UNITS[id]?.color??'#888'},
-                    geometry:{type:'LineString',coordinates:pts}
-                  }))
-                mapRef.current.getSource('sim-trails')?.setData({type:'FeatureCollection',features})
-              } catch(_){}
+        const tid = setTimeout(() => {
+          if (!markersRef.current[unitId]) return
+          unitRafsRef.current[unitId] = animateMarkerTo(
+            marker, fromPos, toPos, 2400,
+            // on done: update trail + prevPos
+            () => {
+              prevPosRef.current[unitId] = toPos
+              const trail = trailsRef.current[unitId]
+              trail.push(toPos)
+              if (trail.length > 5) trail.shift()
+              if (mapRef.current) {
+                try {
+                  const features = Object.entries(trailsRef.current)
+                    .filter(([_,pts])=>pts.length>=2)
+                    .map(([id,pts])=>({
+                      type:'Feature',
+                      properties:{color:SIM_UNITS[id]?.color??'#888'},
+                      geometry:{type:'LineString',coordinates:pts}
+                    }))
+                  mapRef.current.getSource('sim-trails')?.setData({type:'FeatureCollection',features})
+                } catch(_){}
+              }
             }
-          }
-        )
+          )
+        }, 500)
+        // store cancel fn: clears timeout OR running rAF
+        unitRafsRef.current[unitId] = () => clearTimeout(tid)
       }
 
       // direction arrow
@@ -492,16 +638,71 @@ export default function Simulation() {
         arrowEl.style.transform = `translateX(-50%) rotate(${b}deg)`
       }
 
+      // update banner: role status text + color strip
+      const statusText = UNIT_STATUS[phase]?.[unitId] ?? '—'
+      const roleElInner    = markersRef.current[unitId]?.roleEl
+      const statusBarInner = markersRef.current[unitId]?.statusBar
+      if (roleElInner)    roleElInner.textContent = statusText
+      if (statusBarInner) {
+        statusBarInner.style.background =
+          statusText.includes('הסתערות') ? '#ef4444' :
+          statusText.includes('ירי')     ? '#3b82f6' :
+          statusText.includes('כיסוי')   ? '#3b82f6' :
+          statusText.includes('תנועה')   ? '#f59e0b' :
+          statusText.includes('נסיגה')   ? '#6b7280' :
+          '#22c55e'
+      }
+
       // active unit visual effects (pulse glow + sonar ring)
       const isActive = (ACTIVE_UNITS[phase]??[]).includes(unitId)
       if (innerEl) innerEl.style.animation = isActive ? 'simPulse 1.4s ease-in-out infinite' : ''
       if (ringEl)  ringEl.style.animation  = isActive ? 'unitRing 1.8s ease-out infinite'    : ''
     }
 
-    // 2. Camera fly
+    // 2. Camera — manual centroid flyTo (NO fitBounds, NO bearing — avoids RTL offset bugs)
+    //    All units always in frame: zoom derived from unit spread, bearing always 0.
     const cam = data.camera
-    map.flyTo({ center:cam.center, zoom:cam.zoom, bearing:cam.bearing, pitch:cam.pitch,
-                duration:1800, essential:true })
+    const unitPositions = Object.values(data.units)   // [[lng,lat], ...]
+    const lngs = unitPositions.map(p => p[0])
+    const lats = unitPositions.map(p => p[1])
+
+    // Include special markers (helicopter, tank) so they never fall off-screen.
+    // These are outside data.units so must be added explicitly per phase.
+    // Phase 3+4: tank at [35.217, 31.825]
+    if (phase === 3 || phase === 4) { lngs.push(35.217); lats.push(31.825) }
+    // Phase 5: helicopter starts at [35.220, 31.828] and flies to [35.228, 31.837]
+    if (phase === 5) { lngs.push(35.220, 35.228); lats.push(31.828, 31.837) }
+
+    // Extra south padding: info banners hang ~120px BELOW each marker coordinate.
+    // At zoom 12.5, 1° lat ≈ 9400px → 120px ≈ 0.013°. Use 0.018° to be safe.
+    const BANNER_PAD = 0.018
+    const southLat = Math.min(...lats) - BANNER_PAD
+
+    // geographic center of all units this phase (shift slightly north for south banner room)
+    const cLng = (Math.min(...lngs) + Math.max(...lngs)) / 2
+    const cLat = (southLat + Math.max(...lats)) / 2
+    // max deviation from center → determines required zoom
+    const maxDev = Math.max(
+      Math.max(...lngs) - cLng,
+      cLng - Math.min(...lngs),
+      (Math.max(...lats) - cLat) * 1.4,   // lat×1.4: account for pitch compression on north
+      (cLat - southLat) * 1.4,            // south deviation includes banner pad
+      0.020,                               // minimum half-extent ~2.2km
+    )
+    // at zoom Z, degrees/pixel ≈ 360/(256×2^Z)
+    // effective half = 170px (conservative — leaves HUD + banner headroom)
+    // zoom = log2( 170 × 360 / (256 × maxDev) )
+    const targetZoom = Math.log2((170 * 360) / (256 * maxDev))
+    const zoom = Math.min(13.0, Math.max(11.0, targetZoom))
+
+    map.flyTo({
+      center:   [cLng, cLat],
+      zoom,
+      bearing:  0,                         // always north-up → no rotation confusion
+      pitch:    Math.min(cam.pitch, 30),   // ≤30° keeps southern units visible
+      duration: 1800,
+      essential: true,
+    })
 
     // 3. Fire lines
     const fireLines = FIRE_LINES_DATA[phase] ?? []
@@ -557,25 +758,26 @@ export default function Simulation() {
     clearInterval(heliTimer.current)
     if(heliRef.current){ heliRef.current.remove(); heliRef.current=null }
     if(phase===5){
+      console.log('[SIM] phase 5 — creating helicopter')
       const hw=document.createElement('div')
-      hw.style.cssText='position:relative;width:64px;height:64px;overflow:visible;z-index:500;'
+      hw.style.cssText='position:relative;width:84px;height:84px;overflow:visible;z-index:2000;'
 
       const hb=document.createElement('div')
       hb.style.cssText=[
         'position:absolute','top:0','left:0',
-        'width:64px','height:64px',
+        'width:84px','height:84px',
         'display:flex','align-items:center','justify-content:center',
-        'font-size:38px',
-        'border-radius:50%','border:4px solid #22c55e',
-        'background:rgba(34,197,94,0.25)',
-        'box-shadow:0 0 35px rgba(34,197,94,1),0 0 70px rgba(34,197,94,0.6)',
+        'font-size:50px',
+        'border-radius:50%','border:5px solid #22c55e',
+        'background:#000000ee',
+        'box-shadow:0 0 0 3px #000,0 0 40px rgba(34,197,94,1),0 0 80px rgba(34,197,94,0.7)',
         'animation:heliFloat 0.75s ease-in-out infinite',
       ].join(';')
       hb.textContent='🚁'
       hw.appendChild(hb)
 
       const hl=document.createElement('div')
-      hl.style.cssText='position:absolute;top:70px;left:32px;transform:translateX(-50%);color:#86efac;font-size:11px;font-weight:900;white-space:nowrap;text-shadow:0 2px 6px #000;background:rgba(0,0,0,0.92);padding:3px 9px;border-radius:5px;pointer-events:none;border:1px solid rgba(34,197,94,0.4);'
+      hl.style.cssText='position:absolute;top:92px;left:42px;transform:translateX(-50%);color:#86efac;font-size:12px;font-weight:900;white-space:nowrap;text-shadow:0 0 8px #22c55e,0 2px 6px #000;background:#000000ee;padding:4px 12px;border-radius:6px;pointer-events:none;border:2px solid #22c55e;box-shadow:0 0 16px rgba(34,197,94,0.8);'
       hl.textContent='🚑  פינוי רפואי'
       hw.appendChild(hl)
 
@@ -602,30 +804,31 @@ export default function Simulation() {
     //    Tank at [35.217,31.825] — confirmed well within view
     if(tankRef.current){tankRef.current.remove();tankRef.current=null}
     if(phase===3||phase===4){
+      console.log('[SIM] phase', phase, '— creating tank')
       const tw=document.createElement('div')
-      tw.style.cssText='position:relative;width:70px;height:62px;overflow:visible;z-index:500;'
+      tw.style.cssText='position:relative;width:84px;height:76px;overflow:visible;z-index:2000;'
 
       const tb=document.createElement('div')
       tb.style.cssText=[
         'position:absolute','top:0','left:0',
-        'width:70px','height:62px',
-        'display:flex','flex-direction:column','align-items:center','justify-content:center','gap:3px',
-        'border:4px solid #f59e0b','border-radius:10px',
-        'background:rgba(245,158,11,0.28)',
-        'box-shadow:0 0 35px rgba(245,158,11,1),0 0 70px rgba(245,158,11,0.65)',
+        'width:84px','height:76px',
+        'display:flex','flex-direction:column','align-items:center','justify-content:center','gap:4px',
+        'border:5px solid #f59e0b','border-radius:12px',
+        'background:#000000ee',
+        'box-shadow:0 0 0 3px #000,0 0 40px rgba(245,158,11,1),0 0 80px rgba(245,158,11,0.7)',
         phase===3?'animation:tankFire 0.4s ease-out 6':'',
       ].join(';')
 
       const ti=document.createElement('div')
-      ti.style.cssText='font-size:28px;line-height:1;'
+      ti.style.cssText='font-size:36px;line-height:1;'
       ti.textContent='💥'
       const tt=document.createElement('div')
-      tt.style.cssText='color:#fbbf24;font-size:10px;font-weight:900;line-height:1;letter-spacing:1px;'
+      tt.style.cssText='color:#fbbf24;font-size:11px;font-weight:900;line-height:1;letter-spacing:1px;text-shadow:0 0 8px #f59e0b;'
       tt.textContent='תמ"ש'
       tb.appendChild(ti); tb.appendChild(tt)
 
       const tl=document.createElement('div')
-      tl.style.cssText='position:absolute;top:68px;left:35px;transform:translateX(-50%);color:#fbbf24;font-size:10px;font-weight:900;white-space:nowrap;text-shadow:0 2px 5px #000;background:rgba(0,0,0,0.92);padding:3px 9px;border-radius:5px;pointer-events:none;border:1px solid rgba(245,158,11,0.5);'
+      tl.style.cssText='position:absolute;top:83px;left:42px;transform:translateX(-50%);color:#fbbf24;font-size:11px;font-weight:900;white-space:nowrap;text-shadow:0 0 8px #f59e0b,0 2px 5px #000;background:#000000ee;padding:4px 12px;border-radius:6px;pointer-events:none;border:2px solid #f59e0b;box-shadow:0 0 16px rgba(245,158,11,0.8);'
       tl.textContent='🔴 תמיכת ירי שריון'
       tw.appendChild(tb); tw.appendChild(tl)
 
@@ -634,20 +837,6 @@ export default function Simulation() {
     }
 
   }, [phase, mapReady])
-
-  // ── cinematic camera drift while playing ─────────────────────────────────
-  useEffect(() => {
-    clearInterval(cinRef.current)
-    if(playing && mapRef.current){
-      let tick=0
-      cinRef.current=setInterval(()=>{
-        const m=mapRef.current; if(!m)return
-        tick++
-        m.setBearing(SIM_PHASES[phase].camera.bearing + Math.sin(tick*0.06)*8)
-      },100)
-    }
-    return()=>clearInterval(cinRef.current)
-  },[playing,phase])
 
   // ── TTS ───────────────────────────────────────────────────────────────────
   useEffect(()=>{
@@ -670,18 +859,122 @@ export default function Simulation() {
     return()=>clearTimeout(t)
   },[phase])
 
-  // ── SADAN show_unit ───────────────────────────────────────────────────────
+  // ── SADAN show_unit — zoom in briefly, then return to fitBounds ─────────
   useEffect(()=>{
     const onShowUnit=e=>{
-      const uid=e.detail?.unit_id, pos=SIM_PHASES[phase].units[uid]
+      const uid=e.detail?.unit_id
+      const phaseData=SIM_PHASES[phase]
+      const pos=phaseData.units[uid]
       if(!pos||!mapRef.current)return
-      mapRef.current.flyTo({center:pos,zoom:16,pitch:60,bearing:0,duration:1500,essential:true})
+      const m=mapRef.current
+      // zoom in on the unit
+      m.flyTo({center:pos,zoom:15,pitch:40,bearing:0,duration:1500,essential:true})
+      // highlight the element
       const el=document.getElementById(`sim-unit-${uid}`)
       if(el){el.style.transform='scale(1.7)';el.style.zIndex='999';setTimeout(()=>{el.style.transform='';el.style.zIndex=''},1400)}
+      // after 4s return to all-units view (same centroid logic as phase effect)
+      setTimeout(()=>{
+        if(!mapRef.current)return
+        const positions=Object.values(phaseData.units)
+        const lngs=positions.map(p=>p[0]),lats=positions.map(p=>p[1])
+        // include special markers per phase
+        if(phase===3||phase===4){lngs.push(35.217);lats.push(31.825)}
+        if(phase===5){lngs.push(35.220,35.228);lats.push(31.828,31.837)}
+        const BANNER_PAD=0.018
+        const southLat=Math.min(...lats)-BANNER_PAD
+        const cLng=(Math.min(...lngs)+Math.max(...lngs))/2
+        const cLat=(southLat+Math.max(...lats))/2
+        const maxDev=Math.max(Math.max(...lngs)-cLng,cLng-Math.min(...lngs),(Math.max(...lats)-cLat)*1.4,(cLat-southLat)*1.4,0.020)
+        const zoom=Math.min(13.0,Math.max(11.0,Math.log2((170*360)/(256*maxDev))))
+        mapRef.current.flyTo({center:[cLng,cLat],zoom,bearing:0,pitch:25,duration:1600,essential:true})
+      },4000)
     }
     window.addEventListener('sadan:sim_show_unit',onShowUnit)
     return()=>window.removeEventListener('sadan:sim_show_unit',onShowUnit)
   },[phase])
+
+  // ── 2D / 3D toggle ───────────────────────────────────────────────────────
+  function toggle3d() {
+    const m = mapRef.current; if (!m) return
+    if (is3d) {
+      m.flyTo({ pitch: 0, bearing: 0, duration: 900, essential: true })
+      setIs3d(false)
+    } else {
+      // restore 3D with pitch, bearing stays 0 to avoid offset
+      m.flyTo({ pitch: Math.min(SIM_PHASES[phase].camera.pitch, 30), bearing: 0, duration: 900, essential: true })
+      setIs3d(true)
+    }
+  }
+
+  // ── marker scale ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    Object.values(markersRef.current).forEach(({ inner }) => {
+      if (inner) inner.style.transform = `scale(${markerScale})`
+    })
+  }, [markerScale])
+
+  // ── next-phase route lines ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!mapRef.current) return
+    const src = mapRef.current.getSource('sim-next-routes')
+    if (!src) return
+    if (!showNextRoute || phase >= SIM_PHASES.length - 1) {
+      src.setData({ type: 'FeatureCollection', features: [] })
+      return
+    }
+    const curr = SIM_PHASES[phase].units
+    const next = SIM_PHASES[phase + 1].units
+    const features = []
+    Object.keys(curr).forEach(uid => {
+      const unit = SIM_UNITS[uid]
+      const from = curr[uid], to = next[uid]
+      if (!from || !to) return
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: [from, to] },
+        properties: { color: unit.color, uid, type: 'route' },
+      })
+      // endpoint dot
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: to },
+        properties: { color: unit.color, uid, type: 'endpoint' },
+      })
+    })
+    src.setData({ type: 'FeatureCollection', features })
+  }, [showNextRoute, phase])
+
+  // ── OPFOR highlight ──────────────────────────────────────────────────────
+  useEffect(() => {
+    Object.values(opforElemsRef.current).forEach(({ el, lbl }) => {
+      if (!el) return
+      el.style.opacity  = opforHighlight ? '1'   : '0.28'
+      el.style.transform = opforHighlight ? 'scale(1.15)' : 'scale(0.7)'
+      if (lbl) lbl.style.opacity = opforHighlight ? '1' : '0.3'
+    })
+  }, [opforHighlight])
+
+  // ── SADAN events for new features ────────────────────────────────────────
+  useEffect(() => {
+    const onScale  = e => {
+      const { delta, scale } = e.detail ?? {}
+      if (scale !== undefined) {
+        setMarkerScale(Math.min(1.6, Math.max(0.35, scale)))
+      } else if (delta !== undefined) {
+        setMarkerScale(prev => Math.min(1.6, Math.max(0.35, prev + delta)))
+      }
+    }
+    const onRoute  = () => setShowNextRoute(v => !v)
+    const onOpfor  = () => setOpforHighlight(v => !v)
+    window.addEventListener('sadan:marker_scale', onScale)
+    window.addEventListener('sadan:toggle_route', onRoute)
+    window.addEventListener('sadan:toggle_opfor', onOpfor)
+    return () => {
+      window.removeEventListener('sadan:marker_scale', onScale)
+      window.removeEventListener('sadan:toggle_route', onRoute)
+      window.removeEventListener('sadan:toggle_opfor', onOpfor)
+    }
+  }, [])
 
   // ── reset ─────────────────────────────────────────────────────────────────
   function handleReset(){
@@ -713,6 +1006,22 @@ export default function Simulation() {
           <span className="text-white font-bold text-sm">סימולציה טקטית — מחלקה ב׳ | שטח 309ה</span>
         </div>
         <div className="flex-1 min-w-0"><PhaseBar phase={phase} onGoto={gotoPhase}/></div>
+        <button onClick={toggle3d} title={is3d?'תצוגה דו-מימדית (2D)':'תצוגה תלת-מימדית (3D)'}
+          className={`p-1.5 rounded-lg transition-colors ${is3d?'text-demo-gold bg-demo-gold/10':'text-gray-500 hover:text-gray-300'}`}>
+          <Layers size={15}/>
+        </button>
+        {/* next-route toggle */}
+        <button onClick={()=>setShowNextRoute(v=>!v)}
+          title={showNextRoute ? 'הסתר מסלול לשלב הבא' : 'הצג מסלול לשלב הבא'}
+          className={`p-1.5 rounded-lg transition-colors text-xs font-bold ${showNextRoute?'text-green-400 bg-green-400/10 border border-green-400/30':'text-gray-500 hover:text-gray-300'}`}>
+          🗺
+        </button>
+        {/* OPFOR toggle */}
+        <button onClick={()=>setOpforHighlight(v=>!v)}
+          title={opforHighlight ? 'הסתר בימוי אויב' : 'הבלט בימוי אויב'}
+          className={`p-1.5 rounded-lg transition-colors text-xs font-bold ${opforHighlight?'text-red-400 bg-red-400/10 border border-red-400/30':'text-gray-500 hover:text-gray-300'}`}>
+          🎯
+        </button>
         <button onClick={()=>setTtsEnabled(v=>!v)} title={ttsEnabled?'כבה קריינות':'הפעל קריינות'}
           className={`p-1.5 rounded-lg transition-colors ${ttsEnabled?'text-demo-gold bg-demo-gold/10':'text-gray-600 hover:text-gray-300'}`}>
           {ttsEnabled?<Volume2 size={15}/>:<VolumeX size={15}/>}
@@ -723,9 +1032,9 @@ export default function Simulation() {
         </div>
       </div>
 
-      {/* map */}
-      <div className="flex-1 relative min-h-0">
-        <div ref={mapElRef} className="w-full h-full"/>
+      {/* map — dir:ltr mandatory: RTL on parent causes MapLibre coordinate offset bugs */}
+      <div className="flex-1 relative min-h-0" dir="ltr">
+        <div ref={mapElRef} className="w-full h-full" style={{direction:'ltr'}}/>
 
         {showCard && <PhaseTitleCard phase={cardPhase}/>}
         <HUDPanel phase={phase} visible={hudVisible} onToggle={()=>setHudVisible(false)}/>
@@ -758,7 +1067,7 @@ export default function Simulation() {
         )}
 
         <div className="absolute bottom-4 left-4 z-20 bg-black/60 border border-demo-gold/30 rounded-xl px-3 py-2 text-xs text-demo-gold/80 backdrop-blur max-w-xs" dir="rtl">
-          💬 <span className="font-semibold">סדן</span> — "עצור", "המשך", "קפוץ לשלב כיסוי", "תראה לי כיתה ב׳"
+          💬 <span className="font-semibold">סדן</span> — "הקטן סימונים", "הבלט מסלול", "הבלט אויב", "מחסנית בטיחות"
         </div>
       </div>
 
@@ -773,6 +1082,18 @@ export default function Simulation() {
         <button onClick={handleReset} className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-demo-card transition-colors" title="התחל מחדש">
           <RotateCcw size={16}/>
         </button>
+        {/* marker scale */}
+        <div className="flex items-center gap-0.5 bg-demo-card border border-demo-border rounded-lg px-1">
+          <button
+            onClick={()=>setMarkerScale(v=>Math.max(0.35,v-0.2))}
+            className="w-6 h-6 text-gray-400 hover:text-white font-bold text-base leading-none transition-colors"
+            title="הקטן סימונים">−</button>
+          <span className="text-[10px] text-gray-500 w-8 text-center">{Math.round(markerScale*100)}%</span>
+          <button
+            onClick={()=>setMarkerScale(v=>Math.min(1.6,v+0.2))}
+            className="w-6 h-6 text-gray-400 hover:text-white font-bold text-base leading-none transition-colors"
+            title="הגדל סימונים">+</button>
+        </div>
         <button onClick={prevPhase} disabled={phase===0}
           className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-demo-card disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm">
           <ChevronRight size={15}/> קודם

@@ -4,7 +4,8 @@ import { MapPin, ShieldCheck, Heart, Crosshair, Truck, Radio, Eye, Users, Globe,
 import Header from '../components/common/Header'
 import BackButton from '../components/common/BackButton'
 import { COORDINATION_PARTIES } from '../data/mockData'
-import { sendWhatsApp, getIncomingMessages, sendVoiceNote, buildRtgMessage } from '../api/whatsapp'
+import { sendWhatsApp, sendWhatsAppMedia, getIncomingMessages, sendVoiceNote, buildRtgMessage, AREA_309_MAP_URL } from '../api/whatsapp'
+import { CONTACTS } from '../data/contacts'
 import { approvalScripts } from '../data/approvalScripts.js'
 
 const ICON_MAP = { MapPin, ShieldCheck, Heart, Crosshair, Truck, Radio, Eye, Users, Globe, Plane }
@@ -50,8 +51,16 @@ export default function Approvals() {
     setParties(prev => prev.map(p => p.id === partyId ? { ...p, status: 'sending' } : p))
 
     if (partyId === 'rtg') {
-      const msg = buildRtgMessage({ unit: 'גדוד 51 / פלוגה ב׳', field: '309ה — בטונדות', date: '05.05.2026', ammo: '5.56, חבלה מוגבלת' })
-      await sendWhatsApp(msg).catch(() => {})
+      const caption = buildRtgMessage({ unit: 'גדוד 51 / פלוגה ב׳', field: '309ה — בטונדות', date: '05.05.2026', ammo: '5.56, חבלה מוגבלת' })
+      // שולח תמונת שטח + טקסט ביחד (MediaMessage)
+      await sendWhatsAppMedia({
+        phone: CONTACTS.raz.wa,
+        mediaUrl: AREA_309_MAP_URL,
+        caption,
+      }).catch(() => {
+        // fallback: טקסט בלבד אם תמונה נכשלה
+        sendWhatsApp(caption, CONTACTS.raz.wa).catch(() => {})
+      })
 
       pollRef.current = setInterval(async () => {
         const msgs = await getIncomingMessages().catch(() => [])
@@ -93,7 +102,7 @@ export default function Approvals() {
   async function sendVoiceRequest(partyId) {
     setVoiceSending(prev => ({ ...prev, [partyId]: true }))
     try {
-      const phone = partyId === 'rtg' ? '+972501234567' : '+972500000000'  // demo phones
+      const phone = partyId === 'rtg' ? `+${CONTACTS.raz.wa}` : `+${CONTACTS.mor.wa}`
       const result = await sendVoiceNote(phone, partyId).catch(() => ({ sent: true, script_text: approvalScripts[partyId] || '' }))
       const text = result.script_text || approvalScripts[partyId] || ''
       setVoiceTranscripts(prev => ({
@@ -118,7 +127,7 @@ export default function Approvals() {
   async function makePhoneCall(partyId) {
     setCallStatus(prev => ({ ...prev, [partyId]: 'calling' }))
     try {
-      const phone = partyId === 'rtg' ? '+972528942575' : '+972528942575'  // מספר לדמו
+      const phone = partyId === 'rtg' ? `+${CONTACTS.raz.wa}` : `+${CONTACTS.mor.wa}`
       const res = await fetch('/api/voice/call', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

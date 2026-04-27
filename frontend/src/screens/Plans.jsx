@@ -133,6 +133,25 @@ export default function Plans() {
   const [buildMode,    setBuildMode]    = useState('ready') // 'ready' | 'scratch'
   const [showDiagram,  setShowDiagram]  = useState(false)
 
+  // SADAN voice: "בחר מתווה א/ב/ג" → setSelected + handleChoose
+  useEffect(() => {
+    function onAction(e) {
+      const { action, plan_id } = e.detail ?? {}
+      if (action === 'select_plan' && plan_id) {
+        setSelected(plan_id)
+        setBuildMode('ready')
+        setTimeout(() => {
+          setLoading(true)
+          setTimeout(() => navigate('/exercise'), 1200)
+        }, 400)
+      } else if (action === 'proceed_plans' && selected) {
+        handleChoose()
+      }
+    }
+    window.addEventListener('sadan:action', onAction)
+    return () => window.removeEventListener('sadan:action', onAction)
+  }, [selected])  // eslint-disable-line react-hooks/exhaustive-deps
+
   // UPGRADE-003: פתיחת צ'אט כש"בנה מאפס" נלחץ
   function handleBuildFromScratch() {
     setBuildMode('scratch')
