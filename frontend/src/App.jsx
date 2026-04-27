@@ -43,9 +43,9 @@ export default function App() {
   )
 }
 
-// On these paths the chat UI is hidden but the component stays mounted (WS alive)
-// Keeping only /demo-check hidden — all other screens are voice-navigable
-const NO_CHAT_PATHS = new Set(['/demo-check'])
+// On these paths the chat panel/button is hidden but component stays mounted (WS alive)
+// Login has its own mic UI. /demo-check has no voice.
+const NO_CHAT_PATHS = new Set(['/', '/demo-check'])
 
 function SadanChatWrapper() {
   const { pathname } = useLocation()

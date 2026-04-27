@@ -636,6 +636,15 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
     return () => window.removeEventListener('sadanOpen', handleOpen)
   }, [])
 
+  // sadanVoiceConnect — Login screen triggers this to start voice without opening the panel
+  useEffect(() => {
+    function onVoiceConnect() {
+      if (!connected) connectVoice()
+    }
+    window.addEventListener('sadanVoiceConnect', onVoiceConnect)
+    return () => window.removeEventListener('sadanVoiceConnect', onVoiceConnect)
+  }, [connected, connectVoice])
+
   // Toggle body class → compresses .sadan-main-content into remaining space
   useEffect(() => {
     if (open) {
@@ -798,7 +807,21 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
       ws.binaryType = 'arraybuffer'
       wsRef.current = ws
 
-      ws.onopen = () => { setConnected(true); setListening(true) }
+      ws.onopen = () => {
+        setConnected(true)
+        setListening(true)
+        // Notify any screen listening for voice connection status (e.g. Login)
+        window.dispatchEvent(new CustomEvent('sadan:voice_status', { detail: { status: 'connected' } }))
+        // Login-screen greeting — show as assistant message
+        const isLoginScreen = window.location.pathname === '/'
+        if (isLoginScreen) {
+          setMessages(prev => [...prev, {
+            id: Date.now() + Math.random(),
+            role: 'assistant',
+            content: 'שלום! אני סדן 👋\n\nאנא אמור את הקוד האישי שלך כדי להתחבר למערכת.',
+          }])
+        }
+      }
 
       ws.onmessage = (e) => {
         if (e.data instanceof ArrayBuffer) {
@@ -868,6 +891,7 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
 
       ws.onclose  = () => {
         setConnected(false); setListening(false); setSpeaking(false)
+        window.dispatchEvent(new CustomEvent('sadan:voice_status', { detail: { status: 'disconnected' } }))
         // Auto-reconnect if user didn't manually disconnect
         if (wantConnected.current) {
           reconnectTimer.current = setTimeout(() => {

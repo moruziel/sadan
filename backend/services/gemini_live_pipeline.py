@@ -524,20 +524,67 @@ class GeminiLivePipeline:
     # ── Audio I/O ──────────────────────────────────────────────
 
     async def _send_audio(self, session):
-        """Browser → FastAPI → Gemini: forward raw 16 kHz PCM chunks."""
+        """
+        Browser → FastAPI → Gemini: forward raw 16 kHz PCM chunks.
+
+        Speaker verification (SpeechBrain):
+        - Accumulates ~1 second of audio (32 KB) then verifies
+        - If no enrolled speakers or verification disabled → pass all audio
+        - If unknown speaker detected → drop chunk + log
+        """
         from fastapi import WebSocketDisconnect
         from google.genai import types
+
+        # Lazy-import so the pipeline still works if speechbrain isn't installed
+        try:
+            from backend.services.speaker_verify import get_verifier
+            verifier = get_verifier()
+        except Exception:
+            verifier = None
+
+        # buffer for speaker verification — 1 second at 16 kHz 16-bit = 32 000 bytes
+        _VERIFY_BUF_SIZE = INPUT_SAMPLE_RATE * 2   # 32 000 bytes
+        _buf = bytearray()
+        _known_speaker: bool = True   # optimistic: pass audio until first verify
 
         try:
             while True:
                 msg = await self.websocket.receive()
-                if "bytes" in msg and msg["bytes"]:
-                    await session.send_realtime_input(
-                        audio=types.Blob(
-                            data=msg["bytes"],
-                            mime_type=f"audio/pcm;rate={INPUT_SAMPLE_RATE}",
-                        )
+                if not ("bytes" in msg and msg["bytes"]):
+                    continue
+
+                chunk = msg["bytes"]
+
+                # ── Speaker verification ─────────────────────────────────────
+                if verifier and verifier.enabled and verifier.has_speakers():
+                    _buf.extend(chunk)
+                    if len(_buf) >= _VERIFY_BUF_SIZE:
+                        # Run blocking torch inference in executor (non-blocking)
+                        loop = asyncio.get_event_loop()
+                        try:
+                            is_known, name, score = await loop.run_in_executor(
+                                None, verifier.verify, bytes(_buf)
+                            )
+                        except Exception as ve:
+                            logger.warning(f"[SpeakerVerify] verify error: {ve}")
+                            is_known = True   # fail open
+
+                        _known_speaker = is_known
+                        if is_known:
+                            logger.debug(f"[SpeakerVerify] ✅ {name} ({score:.3f})")
+                        else:
+                            logger.info(f"[SpeakerVerify] 🚫 unknown speaker ({score:.3f}) — dropping")
+                        _buf.clear()
+
+                    if not _known_speaker:
+                        continue  # drop chunk — unknown speaker
+
+                await session.send_realtime_input(
+                    audio=types.Blob(
+                        data=chunk,
+                        mime_type=f"audio/pcm;rate={INPUT_SAMPLE_RATE}",
                     )
+                )
         except WebSocketDisconnect:
             logger.info("[Gemini Live] Browser disconnected")
         except Exception as e:
