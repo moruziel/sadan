@@ -32,12 +32,35 @@ SADAN_SYSTEM_PROMPT = """\
 אתה סדן, סוכן בינה מלאכותית של מערך האימונים בצה"ל.
 אתה מסייע לתכנון ובחינת שטחי אימון, ויכול לשלוט במפה ובאפליקציה.
 
-כללים:
+כללים כלליים:
 - דבר עברית בלבד.
 - תשובות קצרות וממוקדות — מקסימום 20 מילים.
 - שאלה אחת בכל פעם.
 - כשמציג אלמנט על המפה — השתמש ב-map_show_element.
-- כשמסביר מגבלה — ציין את הסיבה בשורה אחת.
+
+כלל קריטי — הודעות מערכת פנימיות:
+כאשר מגיעה הודעה בפורמט [מידע מערכת: ...] — זו הודעת רקע פנימית.
+אסור לקרוא אותה בקול. אסור להגיב עליה. פשוט עדכן את ההקשר שלך בשקט ואל תאמר כלום.
+
+═══ שלב הזדהות — כללים מחייבים ═══
+
+אתה נמצא כרגע במסך הזדהות. מצב זה פעיל עד שהמשתמש יספק קוד תקין.
+
+מה מותר בשלב זה:
+- fill_field(field_id="login_id", value=<קוד>) — זה הכלי היחיד שבשימוש.
+- לשאול את המשתמש על מספרו האישי.
+
+מה אסור בשלב זה (בכל מקרה, ללא יוצא מן הכלל):
+- app_navigate — חסום לחלוטין. לא תנסה לנווט לשום מסך.
+- לכל בקשת ניווט ענה: "ניווט יתאפשר לאחר הזדהות. אנא הזן מספר אישי."
+
+פרוטוקול הזדהות:
+1. כשמקבל "פתח שיחה" → אמור בדיוק: "שלום, אני סדן — מערכת תכנון ותיאום אימונים. אנא הזן את המספר האישי שלך."
+2. כשהמשתמש אומר מספר בן 7 ספרות → קרא fill_field(field_id="login_id", value=<המספר>).
+3. תגובת הכלי "authenticated" → אמור: "צהריים טובים, רס״ן כהן. מתחבר למערכת."
+4. תגובת הכלי "wrong_code" → אמור: "קוד שגוי. [X ניסיונות נותרו]".
+5. תגובת הכלי "locked" → אמור: "שלושה ניסיונות נכשלו. פנה למנהל המערכת." — הפסק לקבל קודים.
+6. תגובת הכלי "blocked" (על app_navigate) → אמור: "ניווט מחייב הזדהות תחילה."
 \
 """
 
@@ -170,9 +193,17 @@ _FIELD_ELEMENTS: dict = {
 class GeminiLivePipeline:
     """Bridges browser WebSocket ↔ Gemini Live API (Vertex AI)."""
 
+    # Valid login code for the demo (matches Login.jsx VALID_CODE)
+    _VALID_LOGIN_CODE = "5236521"
+    _MAX_LOGIN_ATTEMPTS = 3
+
     def __init__(self, websocket, system_prompt: str = SADAN_SYSTEM_PROMPT):
         self.websocket = websocket
         self.system_prompt = system_prompt
+        self._authenticated = False      # True after correct login code
+        self._login_attempts = 0         # counts failed attempts
+        self._peeked_msg = None          # first browser msg consumed during pre-connect peek
+        self._skip_greeting = False      # True when login screen already greeted the user
 
     async def run(self):
         try:
@@ -413,7 +444,7 @@ class GeminiLivePipeline:
                     name="sim_show_unit",
                     description=(
                         "הצג יחידה ספציפית על המפה — המפה תטוס אליה. "
-                        "הפעל כשמבקשים 'תראה לי כיתה ב׳', 'איפה המ"מ', וכו׳."
+                        "הפעל כשמבקשים 'תראה לי כיתה ב׳', 'איפה המ״מ', וכו׳."
                     ),
                     parameters=types.Schema(
                         type=types.Type.OBJECT,
@@ -429,16 +460,24 @@ class GeminiLivePipeline:
             ]
         )
 
-        # fill_field — fill a field in the combat procedure (נוהל קרב)
+        # fill_field — fill any app field (login, questionnaire, combat procedure)
         fill_field_tool = types.Tool(
             function_declarations=[
                 types.FunctionDeclaration(
                     name="fill_field",
                     description=(
-                        "מלא שדה ספציפי בנוהל הקרב (מסך נוהל קרב בתיק התרגיל). "
-                        "הפעל כשהמשתמש מבקש לעדכן, למלא, לשנות, לכתוב או להוסיף מידע בנוהל הקרב. "
-                        "section: missionReceived/situationAssessment/plan/order/preparations. "
-                        "field_id: מזהה השדה (לדוגמה: mission_source, enemy, plan_concept, phase1, prep_h24)."
+                        "מלא שדה באפליקציה. "
+                        "1) כניסה למערכת: כשהמשתמש אומר קוד בן 7 ספרות — fill_field(field_id='login_id', value=<הקוד>, section=''). "
+                        "2) שאלון תרגיל (section=''): "
+                        "  readiness = רמת כשירות (aleph/bet/gimel/dalet). "
+                        "  objective = מטרת האימון (טקסט חופשי). "
+                        "  topic = נושא ספציפי (טקסט חופשי). "
+                        "  ammo = סוג תחמושת ('5.56 בלבד'/'5.56 + חבלה'/'ירי כבד'/'חי\"ר + שריון'/'ללא חי'). "
+                        "  date = תאריך (dd/mm/yyyy). "
+                        "  forceSize = גודל כוח (מספר). "
+                        "  composition = הרכב ('חי\"ר'/'שריון'/'מהנדסים' וכו׳). "
+                        "3) נוהל קרב: section = missionReceived/situationAssessment/plan/order/preparations. "
+                        "  field_id: mission_source/enemy/plan_concept/phase1/prep_h24 וכו׳."
                     ),
                     parameters=types.Schema(
                         type=types.Type.OBJECT,
@@ -446,8 +485,8 @@ class GeminiLivePipeline:
                             "field_id": types.Schema(
                                 type=types.Type.STRING,
                                 description=(
-                                    "מזהה השדה לעדכון. אפשרויות לפי section: "
-                                    "missionReceived: mission_source/mission_time/mission_location/mission_essence. "
+                                    "שאלון: readiness/objective/topic/ammo/date/forceSize/composition. "
+                                    "נוהל קרב — missionReceived: mission_source/mission_time/mission_location/mission_essence. "
                                     "situationAssessment: enemy/terrain/ownForces/time/conclusion. "
                                     "plan: plan_concept/plan_main/plan_reserve/plan_alt. "
                                     "order: enemy_detail/friendly/mission_full/phase1/phase2/phase3/phase4/phase5/phase6/ammo_log/medical_l/water_l/cmd_loc/callsign/freq. "
@@ -460,7 +499,7 @@ class GeminiLivePipeline:
                             ),
                             "section": types.Schema(
                                 type=types.Type.STRING,
-                                description="הסקשן: missionReceived / situationAssessment / plan / order / preparations",
+                                description="שאלון: '' (ריק). נוהל קרב: missionReceived/situationAssessment/plan/order/preparations.",
                             ),
                         },
                         required=["field_id", "value", "section"],
@@ -469,10 +508,15 @@ class GeminiLivePipeline:
             ]
         )
 
+        # NOTE: active_prompt is set below (after pre-connect peek).
+        # We build config right before connecting so it uses the correct prompt.
+        # Placeholder — will be replaced.
+        _active_prompt_placeholder = self.system_prompt
+
         config = types.LiveConnectConfig(
             response_modalities=[types.Modality.AUDIO],
             system_instruction=types.Content(
-                parts=[types.Part(text=self.system_prompt)]
+                parts=[types.Part(text=_active_prompt_placeholder)]
             ),
             speech_config=types.SpeechConfig(
                 language_code="he",   # ISO 639-1 — force Hebrew speech synthesis
@@ -496,13 +540,104 @@ class GeminiLivePipeline:
             ],
         )
 
-        logger.info(f"[Gemini Live] Connecting — model={MODEL}")
+        # ── Pre-connect: peek for auth_context before starting Gemini session ──
+        # Frontend sends auth_context immediately on ws.onopen when user is already
+        # authenticated in this browser session. We wait up to 400 ms to receive it
+        # so we can skip the "please enter your ID" greeting.
+        try:
+            first_msg = await asyncio.wait_for(self.websocket.receive(), timeout=0.4)
+            if first_msg and "text" in first_msg and first_msg["text"]:
+                try:
+                    ctrl = json.loads(first_msg["text"])
+                    if ctrl.get("type") == "auth_context" and ctrl.get("authenticated"):
+                        self._authenticated = True
+                        self._skip_greeting = bool(ctrl.get("skip_greeting", False))
+                        logger.info(f"[Gemini Live] Pre-connect auth_context → authenticated=True skip_greeting={self._skip_greeting}")
+                    else:
+                        # Not auth_context — save it so _send_audio can process it
+                        self._peeked_msg = first_msg
+                except Exception:
+                    self._peeked_msg = first_msg
+            elif first_msg:
+                self._peeked_msg = first_msg
+        except asyncio.TimeoutError:
+            logger.info("[Gemini Live] Pre-connect: no auth_context in 400ms — new session")
+        except Exception as pe:
+            logger.debug(f"[Gemini Live] Pre-connect peek error (ignored): {pe}")
+
+        # ── Build system prompt based on auth state ───────────────────────────
+        # This must happen AFTER the pre-connect peek so _authenticated is final.
+        _LOGIN_OPENING = (
+            'שלום, אני סדן — מערכת תכנון ותיאום אימונים. אנא הזן את המספר האישי שלך.'
+        )
+        if self._authenticated:
+            active_prompt = (
+                "== עקיפת הזדהות ==\n"
+                "המשתמש כבר עבר הזדהות מוצלחת בסשן זה. "
+                "אל תבקש מספר אישי ואל תפעיל פרוטוקול הזדהות.\n\n"
+                + self.system_prompt
+            )
+            if self._skip_greeting:
+                # Login screen already greeted — just be ready, don't greet again
+                greeting_text = "המשתמש נכנס למערכת. המתן לפנייה שלו בשקט."
+            else:
+                greeting_text = "ברך את רס״ן כהן ושאל במה תוכל לעזור"
+        else:
+            # Normal: prepend opening instruction so Gemini says the exact greeting
+            active_prompt = (
+                f'כשהשיחה מתחילה, אמור מיד את המשפט הבא בדיוק: "{_LOGIN_OPENING}"\n\n'
+                + self.system_prompt
+            )
+            greeting_text = "פתח שיחה"
+
+        # Rebuild config with the correct (auth-aware) prompt
+        config = types.LiveConnectConfig(
+            response_modalities=[types.Modality.AUDIO],
+            system_instruction=types.Content(
+                parts=[types.Part(text=active_prompt)]
+            ),
+            speech_config=types.SpeechConfig(
+                language_code="he",
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Charon")
+                )
+            ),
+            output_audio_transcription=types.AudioTranscriptionConfig(language_codes=["he-IL"]),
+            input_audio_transcription=types.AudioTranscriptionConfig(language_codes=["he-IL"]),
+            tools=[
+                send_wa_tool, toggle_3d_tool,
+                map_fly_to_tool, map_zoom_tool, map_rotate_tool, map_show_layer_tool,
+                app_navigate_tool, map_show_element_tool, fill_field_tool,
+                sim_pause_tool, sim_resume_tool, sim_goto_phase_tool, sim_show_unit_tool,
+            ],
+        )
+
+        logger.info(f"[Gemini Live] Connecting — model={MODEL} | authenticated={self._authenticated}")
         try:
             async with client.aio.live.connect(model=MODEL, config=config) as session:
                 logger.info("[Gemini Live] ✅ Session open")
 
-                send_task = asyncio.create_task(self._send_audio(session))
+                from google.genai import types as _gtypes
+
+                # Start recv_task FIRST — must be listening before we send the trigger,
+                # otherwise Gemini's greeting response may arrive before the generator is ready.
                 recv_task = asyncio.create_task(self._receive_audio(session))
+                await asyncio.sleep(0.05)   # let recv_task reach session.receive()
+
+                if self._skip_greeting:
+                    # Login screen already greeted — send nothing, wait for user to speak
+                    logger.info("[Gemini Live] skip_greeting=True — no trigger sent, waiting for user")
+                else:
+                    await session.send_client_content(
+                        turns=_gtypes.Content(
+                            role="user",
+                            parts=[_gtypes.Part(text=greeting_text)],
+                        ),
+                        turn_complete=True,
+                    )
+                    logger.info(f"[Gemini Live] ✅ greeting trigger sent (auth={self._authenticated})")
+
+                send_task = asyncio.create_task(self._send_audio(session))
 
                 # Run until one side closes (browser disconnect or Gemini closes)
                 done, pending = await asyncio.wait(
@@ -546,10 +681,50 @@ class GeminiLivePipeline:
         _VERIFY_BUF_SIZE = INPUT_SAMPLE_RATE * 2   # 32 000 bytes
         _buf = bytearray()
         _known_speaker: bool = True   # optimistic: pass audio until first verify
+        chunks_sent = 0
+
+        # If pre-connect peek captured a non-auth message, process it first
+        _pending_msg = self._peeked_msg
+        self._peeked_msg = None
 
         try:
             while True:
-                msg = await self.websocket.receive()
+                msg = _pending_msg if _pending_msg is not None else await self.websocket.receive()
+                _pending_msg = None  # only use once
+
+                # ── Text control messages from frontend ───────────────────────
+                if "text" in msg and msg["text"]:
+                    try:
+                        ctrl = json.loads(msg["text"])
+                        msg_type = ctrl.get("type", "")
+
+                        if msg_type == "auth_context" and ctrl.get("authenticated"):
+                            # User already authenticated in this browser session — skip re-auth
+                            self._authenticated = True
+                            logger.info("[Gemini Live] auth_context received — authenticated=True (skip re-auth)")
+
+                        elif msg_type == "screen_change":
+                            screen = ctrl.get("screen", "")
+                            _SCREEN_NAMES = {
+                                "/area":            "area",
+                                "/field-selection": "field-selection",
+                                "/questionnaire":   "questionnaire",
+                                "/plans":           "plans",
+                                "/exercise":        "exercise",
+                                "/quiz":            "quiz",
+                                "/approvals":       "approvals",
+                                "/simulation":      "simulation",
+                            }
+                            screen_key = _SCREEN_NAMES.get(screen, screen.lstrip("/"))
+                            await session.send_realtime_input(
+                                text=f"[מידע מערכת: screen={screen_key}]"
+                            )
+                            logger.info(f"[Gemini Live] screen_change → {screen}")
+
+                    except Exception:
+                        pass
+                    continue
+
                 if not ("bytes" in msg and msg["bytes"]):
                     continue
 
@@ -585,6 +760,7 @@ class GeminiLivePipeline:
                         mime_type=f"audio/pcm;rate={INPUT_SAMPLE_RATE}",
                     )
                 )
+                chunks_sent += 1
         except WebSocketDisconnect:
             logger.info("[Gemini Live] Browser disconnected")
         except Exception as e:
@@ -679,13 +855,26 @@ class GeminiLivePipeline:
                                 }
                                 page = str((fc.args or {}).get("page", ""))
                                 path = _PAGE_MAP.get(page, f"/{page}")
-                                await self.websocket.send_text(json.dumps({
-                                    "type": "app_navigate",
-                                    "path": path,
-                                }, ensure_ascii=False))
-                                await session.send_tool_response(function_responses=[
-                                    types.FunctionResponse(name="app_navigate", id=fc.id, response={"result": "ok"})
-                                ])
+                                if not self._authenticated:
+                                    # Block navigation until user logs in
+                                    logger.warning(f"[Gemini Live] app_navigate BLOCKED (not authenticated): {path}")
+                                    await session.send_tool_response(function_responses=[
+                                        types.FunctionResponse(
+                                            name="app_navigate", id=fc.id,
+                                            response={
+                                                "result": "blocked",
+                                                "message": "ניווט חסום. המשתמש טרם הזדהה. בקש מספר אישי תחילה.",
+                                            }
+                                        )
+                                    ])
+                                else:
+                                    await self.websocket.send_text(json.dumps({
+                                        "type": "app_navigate",
+                                        "path": path,
+                                    }, ensure_ascii=False))
+                                    await session.send_tool_response(function_responses=[
+                                        types.FunctionResponse(name="app_navigate", id=fc.id, response={"result": "ok"})
+                                    ])
 
                             elif fc.name == "map_show_element":
                                 element_key = str((fc.args or {}).get("element", ""))
@@ -732,16 +921,70 @@ class GeminiLivePipeline:
 
                             elif fc.name == "fill_field":
                                 args = fc.args or {}
-                                await self.websocket.send_text(json.dumps({
-                                    "type":     "fill_field",
-                                    "field_id": str(args.get("field_id", "")),
-                                    "value":    str(args.get("value", "")),
-                                    "section":  str(args.get("section", "")),
-                                }, ensure_ascii=False))
-                                logger.info(f"[Gemini Live] fill_field: section={args.get('section')} field={args.get('field_id')}")
-                                await session.send_tool_response(function_responses=[
-                                    types.FunctionResponse(name="fill_field", id=fc.id, response={"result": "filled"})
-                                ])
+                                field_id = str(args.get("field_id", ""))
+                                value    = str(args.get("value", ""))
+
+                                # ── Login authentication ──────────────────────
+                                if field_id == "login_id":
+                                    if self._authenticated:
+                                        # Already logged in — ignore duplicate
+                                        tool_resp = {"result": "already_authenticated"}
+                                    elif value == self._VALID_LOGIN_CODE:
+                                        self._authenticated = True
+                                        self._login_attempts = 0
+                                        # Tell frontend to trigger success screen
+                                        await self.websocket.send_text(json.dumps({
+                                            "type": "fill_field", "field_id": "login_id",
+                                            "value": value, "section": "",
+                                        }, ensure_ascii=False))
+                                        tool_resp = {
+                                            "result": "authenticated",
+                                            "user": "רס\"ן כהן",
+                                            "message": "הזדהות הצליחה. המערכת מתחברת.",
+                                        }
+                                        logger.info("[Gemini Live] login: AUTHENTICATED")
+                                    else:
+                                        self._login_attempts += 1
+                                        remaining = self._MAX_LOGIN_ATTEMPTS - self._login_attempts
+                                        if remaining > 0:
+                                            tool_resp = {
+                                                "result": "wrong_code",
+                                                "attempts_remaining": remaining,
+                                                "message": f"קוד שגוי. נותרו {remaining} ניסיונות.",
+                                            }
+                                        else:
+                                            tool_resp = {
+                                                "result": "locked",
+                                                "message": "3 ניסיונות נכשלו. פנה למנהל המערכת.",
+                                            }
+                                        logger.warning(f"[Gemini Live] login: wrong code, attempt {self._login_attempts}")
+                                    await session.send_tool_response(function_responses=[
+                                        types.FunctionResponse(name="fill_field", id=fc.id, response=tool_resp)
+                                    ])
+
+                                    # Auth just completed THIS turn (live, mid-session) — the static
+                                    # system_instruction still says "you're on the login screen, navigation
+                                    # forbidden" for the rest of the session (system_instruction can't be
+                                    # updated after connect). Send an explicit silent override so Gemini
+                                    # stops re-asking for the ID / blocking navigation on later screens.
+                                    if tool_resp.get("result") == "authenticated":
+                                        await session.send_realtime_input(
+                                            text="[מידע מערכת: הזדהות הושלמה בהצלחה. שלב ההזדהות הסתיים — "
+                                                 "אל תבקש מספר אישי שוב ואל תחסום ניווט במהלך הסשן הזה.]"
+                                        )
+
+                                # ── Regular field fill (other screens) ───────
+                                else:
+                                    await self.websocket.send_text(json.dumps({
+                                        "type":     "fill_field",
+                                        "field_id": field_id,
+                                        "value":    value,
+                                        "section":  str(args.get("section", "")),
+                                    }, ensure_ascii=False))
+                                    logger.info(f"[Gemini Live] fill_field: section={args.get('section')} field={field_id}")
+                                    await session.send_tool_response(function_responses=[
+                                        types.FunctionResponse(name="fill_field", id=fc.id, response={"result": "filled"})
+                                    ])
 
                             elif fc.name == "sim_pause":
                                 await self.websocket.send_text(json.dumps({"type": "sim_pause"}, ensure_ascii=False))

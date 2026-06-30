@@ -2,7 +2,7 @@
  * DemoChecklist — מסך הכנה לדמו (פנימי, /demo-check).
  * לא מוצג בניווט הרגיל — רק למור.
  */
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 
 const CHECKLIST_ITEMS = [
   { id: 'qr',       label: 'QR ווצאפ נסרק' },
@@ -46,6 +46,126 @@ export default function DemoChecklist() {
   const [runLog,  setRunLog]    = useState([])
   const [savedMsg, setSavedMsg] = useState('')
 
+  // ── Speaker verification state ────────────────────────────
+  const [spkData,    setSpkData]    = useState({ speakers: [], enabled: false, count: 0 })
+  const [spkMsg,     setSpkMsg]     = useState('')
+  const [enrollName, setEnrollName] = useState('')
+  const [enrollSt,   setEnrollSt]   = useState('idle') // idle|recording|sending|done|error
+
+  const fetchSpeakers = useCallback(async () => {
+    try {
+      const r = await fetch('http://localhost:8000/api/speaker/list', { signal: AbortSignal.timeout(3000) })
+      if (r.ok) setSpkData(await r.json())
+    } catch {}
+  }, [])
+
+  useEffect(() => { fetchSpeakers() }, [fetchSpeakers])
+
+  async function toggleSpeakerVerify(enabled) {
+    try {
+      await fetch('http://localhost:8000/api/speaker/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      })
+      fetchSpeakers()
+      showSpkMsg(enabled ? '✅ זיהוי קולי הופעל' : '⬜ זיהוי קולי כובה')
+    } catch { showSpkMsg('❌ שגיאת חיבור לשרת') }
+  }
+
+  async function removeSpeaker(name) {
+    try {
+      await fetch(`http://localhost:8000/api/speaker/${encodeURIComponent(name)}`, { method: 'DELETE' })
+      fetchSpeakers()
+      showSpkMsg(`🗑️ "${name}" הוסר`)
+    } catch { showSpkMsg('❌ שגיאה בהסרה') }
+  }
+
+  async function resetAllSpeakers() {
+    for (const name of spkData.speakers) {
+      try {
+        await fetch(`http://localhost:8000/api/speaker/${encodeURIComponent(name)}`, { method: 'DELETE' })
+      } catch {}
+    }
+    fetchSpeakers()
+    showSpkMsg('🗑️ כל הרמקולים נמחקו')
+  }
+
+  function showSpkMsg(msg) {
+    setSpkMsg(msg)
+    setTimeout(() => setSpkMsg(''), 3000)
+  }
+
+  async function startEnrollment() {
+    if (!enrollName.trim() || enrollSt === 'recording' || enrollSt === 'sending') return
+    setEnrollSt('recording')
+    setSpkMsg('🎙️ מקליט 5 שניות — דבר בבירור...')
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { sampleRate: 16000, echoCancellation: true, noiseSuppression: true },
+      })
+      const ctx = new AudioContext({ sampleRate: 16000 })
+      const source = ctx.createMediaStreamSource(stream)
+      const processor = ctx.createScriptProcessor(4096, 1, 1)
+      const chunks = []
+
+      source.connect(processor)
+      processor.connect(ctx.destination)
+      processor.onaudioprocess = (e) => {
+        const f32 = e.inputBuffer.getChannelData(0)
+        const i16 = new Int16Array(f32.length)
+        for (let j = 0; j < f32.length; j++) {
+          i16[j] = Math.max(-32768, Math.min(32767, f32[j] * 32768))
+        }
+        chunks.push(i16.buffer.slice())
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 5000))
+
+      processor.disconnect(); source.disconnect()
+      await ctx.close()
+      stream.getTracks().forEach(t => t.stop())
+
+      setEnrollSt('sending')
+      setSpkMsg('📤 שולח לשרת...')
+
+      // Combine PCM chunks → Uint8Array → base64
+      const total = chunks.reduce((a, b) => a + b.byteLength, 0)
+      const combined = new Uint8Array(total)
+      let offset = 0
+      for (const chunk of chunks) {
+        combined.set(new Uint8Array(chunk), offset)
+        offset += chunk.byteLength
+      }
+      let binary = ''
+      for (let i = 0; i < combined.length; i++) binary += String.fromCharCode(combined[i])
+      const b64 = btoa(binary)
+
+      const r = await fetch('http://localhost:8000/api/speaker/enroll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: enrollName.trim(), audio_base64: b64 }),
+      })
+
+      if (r.ok) {
+        const data = await r.json()
+        setEnrollSt('done')
+        setEnrollName('')
+        showSpkMsg(`✅ ${data.message}`)
+        fetchSpeakers()
+      } else {
+        const err = await r.json().catch(() => ({}))
+        setEnrollSt('error')
+        showSpkMsg(`❌ ${err.detail || 'שגיאה בהרשמה'}`)
+      }
+    } catch (e) {
+      setEnrollSt('error')
+      showSpkMsg(`❌ ${e.message?.includes('media') ? 'אין גישה למיקרופון' : e.message}`)
+    } finally {
+      setTimeout(() => setEnrollSt('idle'), 1500)
+    }
+  }
+
   // ── Check logic ───────────────────────────────────────────
   const runChecks = useCallback(async () => {
     setRunning(true)
@@ -82,7 +202,7 @@ export default function DemoChecklist() {
       const r = await fetch('http://localhost:3001/status', { signal: AbortSignal.timeout(3000) })
       if (r.ok) {
         const data = await r.json()
-        const isReady = data?.status === 'ready' || data?.connected === true
+        const isReady = data?.ready === true
         setServerStatus(prev => ({ ...prev, whatsapp: isReady ? 'ok' : 'checking' }))
         addLog(isReady ? '✅ WhatsApp Server — מחובר' : '🟡 WhatsApp Server — פועל אך לא מחובר (נדרש QR)')
       } else {
@@ -146,6 +266,102 @@ export default function DemoChecklist() {
           <h1 className="text-2xl font-black text-white">הכנה לדמו — SADAN</h1>
           <p className="text-gray-500 text-sm mt-1">פנימי בלבד — לא חלק מהדמו</p>
         </div>
+
+        {/* ── Speaker Verification ───────────────────────────── */}
+        <section className="bg-demo-surface border border-demo-border rounded-2xl p-5 space-y-3">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-white font-bold text-base">🎙️ זיהוי קולי (SpeechBrain)</h2>
+            <button onClick={fetchSpeakers} className="text-gray-500 hover:text-gray-300 text-xs px-2 py-1 rounded hover:bg-white/5">
+              ↻ רענן
+            </button>
+          </div>
+
+          {/* Toggle enabled */}
+          <div className="flex items-center justify-between px-4 py-2.5 rounded-xl border border-demo-border bg-demo-card">
+            <div>
+              <div className="text-sm text-gray-200 font-medium">אימות דובר</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">
+                {spkData.enabled ? 'פעיל — רק קולות מורשים יתקבלו' : 'כבוי — כל קול מתקבל'}
+              </div>
+            </div>
+            <button
+              onClick={() => toggleSpeakerVerify(!spkData.enabled)}
+              className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${spkData.enabled ? 'bg-green-500' : 'bg-gray-600'}`}
+            >
+              <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all shadow ${spkData.enabled ? 'right-1' : 'right-7'}`} />
+            </button>
+          </div>
+
+          {/* Enrolled speakers list */}
+          {spkData.count === 0 ? (
+            <div className="text-center py-3 text-gray-600 text-sm">אין רמקולים רשומים</div>
+          ) : (
+            <div className="space-y-1.5">
+              {spkData.speakers.map(name => (
+                <div key={name} className="flex items-center justify-between px-4 py-2 rounded-xl border border-demo-border bg-demo-card text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-400 text-base">👤</span>
+                    <span className="text-white font-medium">{name}</span>
+                  </div>
+                  <button
+                    onClick={() => removeSpeaker(name)}
+                    className="text-xs text-red-400 hover:text-red-300 px-2 py-0.5 rounded border border-red-800/40 hover:border-red-600/40 transition-colors"
+                  >
+                    הסר
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Enroll new speaker */}
+          <div className="pt-1 border-t border-demo-border/50">
+            <div className="text-xs text-gray-500 mb-2">הרשמת רמקול חדש (5 שניות הקלטה)</div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="שם הרמקול..."
+                value={enrollName}
+                onChange={e => setEnrollName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && startEnrollment()}
+                className="flex-1 bg-demo-card border border-demo-border rounded-xl px-3 py-1.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-demo-gold/60"
+                dir="rtl"
+              />
+              <button
+                onClick={startEnrollment}
+                disabled={!enrollName.trim() || enrollSt === 'recording' || enrollSt === 'sending'}
+                className={`px-3 py-1.5 text-sm font-bold rounded-xl transition-all flex-shrink-0 ${
+                  enrollSt === 'recording'
+                    ? 'bg-red-500/20 text-red-400 border border-red-600/40 animate-pulse'
+                    : enrollSt === 'sending'
+                    ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-600/40'
+                    : 'bg-demo-gold/20 text-demo-gold border border-demo-gold/40 hover:bg-demo-gold/30 disabled:opacity-40'
+                }`}
+              >
+                {enrollSt === 'recording' ? '🔴 מקליט' : enrollSt === 'sending' ? '⏳' : '+ הרשם'}
+              </button>
+            </div>
+          </div>
+
+          {/* Reset all */}
+          {spkData.count > 0 && (
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={resetAllSpeakers}
+                className="text-xs text-red-400 hover:text-red-300 px-3 py-1 rounded-lg border border-red-800/40 hover:border-red-600/40 transition-colors"
+              >
+                🗑️ מחק הכל
+              </button>
+            </div>
+          )}
+
+          {/* Status message */}
+          {spkMsg && (
+            <div className="text-sm text-center py-1 text-gray-300 bg-demo-card rounded-xl px-3">
+              {spkMsg}
+            </div>
+          )}
+        </section>
 
         {/* Server status */}
         <section className="bg-demo-surface border border-demo-border rounded-2xl p-5 space-y-3">

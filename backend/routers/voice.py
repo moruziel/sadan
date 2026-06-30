@@ -476,16 +476,16 @@ async def get_ncco(call_id: str):
     Called by Vonage (answer_url) when the call is answered.
     Returns NCCO that connects the call to our WebSocket AI handler.
     """
-    print(f"[NCCO] ← Vonage hit NCCO endpoint. call_id={call_id}", flush=True)
-    print(f"[NCCO] active_calls={list(_active_calls.keys())}", flush=True)
+    logger.info(f"[NCCO] Vonage hit NCCO endpoint. call_id={call_id}")
+    logger.info(f"[NCCO] active_calls={list(_active_calls.keys())}")
 
     if call_id not in _active_calls:
-        print(f"[NCCO] ❌ call_id NOT in active_calls — returning error", flush=True)
+        logger.error(f"[NCCO] call_id NOT in active_calls — returning error")
         return [{"action": "talk", "text": "System error. Goodbye.", "voiceName": "Carmel"}]
 
     ws_url = f"wss://{settings.ngrok_host}/api/voice/ws/{call_id}"
-    logger.info(f"NCCO requested for {call_id} → {ws_url}")
-    print(f"[NCCO] ✅ Returning WebSocket NCCO → {ws_url}", flush=True)
+    logger.info(f"NCCO requested for {call_id} -> {ws_url}")
+    logger.info(f"[NCCO] Returning WebSocket NCCO -> {ws_url}")
 
     return [
         {
@@ -510,8 +510,7 @@ async def voice_websocket(websocket: WebSocket, call_id: str):
     """
     await websocket.accept()
     logger.info(f"WebSocket connected for call {call_id}")
-    print(f"[DIAG] Vonage WebSocket connected — call_id={call_id}", flush=True)
-    print(f"[DIAG] active_calls keys: {list(_active_calls.keys())}", flush=True)
+    logger.info(f"[DIAG] active_calls keys: {list(_active_calls.keys())}")
 
     call_info = _active_calls.get(call_id, {})
     script_id = call_info.get("script_id", "rtg")

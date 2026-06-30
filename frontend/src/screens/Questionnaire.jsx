@@ -6,7 +6,7 @@ import BackButton from '../components/common/BackButton'
 
 const READINESS_LEVELS = [
   { value: 'aleph', label: 'א׳', sub: 'ראשונה', desc: 'כשיר לחלוטין — כל מסלולי אש פתוחים',         color: 'green',  blocked: false },
-  { value: 'bet',   label: 'ב׳', sub: 'שנייה',  desc: 'כשיר — נדרש קצין מאשר מדרגת סמ"ה ומעלה',    color: 'green',  blocked: false },
+  { value: 'bet',   label: 'ב׳', sub: 'שנייה',  desc: 'כשיר — נדרש קצין מאשר מדרגת סא"ל ומעלה',    color: 'green',  blocked: false },
   { value: 'gimel', label: 'ג׳', sub: 'שלישית', desc: 'כשירות חלקית — אסור לתרגל ירי חי',           color: 'orange', blocked: true  },
   { value: 'dalet', label: 'ד׳', sub: 'רביעית', desc: 'לא כשיר — יש לשדרג לפני כל פעילות אש',       color: 'red',    blocked: true  },
 ]
@@ -130,7 +130,7 @@ export default function Questionnaire() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-demo-bg" dir="rtl">
+    <div className="flex flex-col h-screen bg-demo-bg overflow-x-hidden" dir="rtl">
       <Header currentPath="/questionnaire" />
 
       <div className="flex-1 overflow-hidden flex flex-col">
@@ -144,7 +144,7 @@ export default function Questionnaire() {
         {form.readiness === 'bet' && (
           <div className="mx-4 mt-2 flex-shrink-0 bg-yellow-900/20 border border-yellow-500/30 rounded-xl px-4 py-2 text-yellow-300 text-xs flex items-center gap-2">
             <span>⚠️</span>
-            <span>קצין מאשר חייב להיות מדרגת סמ"ה ומעלה.</span>
+            <span>קצין מאשר חייב להיות מדרגת סא"ל ומעלה.</span>
           </div>
         )}
 
@@ -221,7 +221,7 @@ export default function Questionnaire() {
                   </button>
 
                   {showDropdown && (
-                    <div className="absolute bottom-8 right-0 z-30 bg-demo-surface border border-demo-border rounded-xl shadow-2xl overflow-hidden w-52">
+                    <div className="absolute bottom-8 left-0 z-30 bg-demo-surface border border-demo-border rounded-xl shadow-2xl overflow-hidden w-52">
                       {COLLAB_OPTIONS
                         .filter(o => !collabItems.find(c => c.id === o.id) && !(sadanAccepted && o.id === 'air_evac'))
                         .map(opt => (

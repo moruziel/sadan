@@ -347,8 +347,8 @@ function OpenQuestion({ onPass }) {
               >
                 {loading ? <><Loader2 size={14} className="animate-spin" />מעריך...</> : <><Send size={14} />שלח</>}
               </button>
-              <span className={`text-xs ${text.length >= QUIZ_OPEN_QUESTION.minLength ? 'text-green-400' : 'text-gray-600'}`}>
-                {text.length}/{QUIZ_OPEN_QUESTION.minLength} תווים
+              <span className="text-xs text-gray-600">
+                {text.length} תווים
               </span>
             </div>
           </>
@@ -370,11 +370,10 @@ function OpenQuestion({ onPass }) {
 export default function Quiz() {
   const navigate = useNavigate()
 
-  // שחזור מצב מ-localStorage (למקרה שחזרנו מהתיק דרך כפתור אינפו)
-  const saved = loadSaved()
-  const [answers,     setAnswers]     = useState(saved?.answers   || {})
-  const [submitted,   setSubmitted]   = useState(saved?.submitted || false)
-  const [openDone,    setOpenDone]    = useState(saved?.openDone  || false)
+  // תמיד מתחילים נקי — לא משחזרים מ-localStorage
+  const [answers,     setAnswers]     = useState({})
+  const [submitted,   setSubmitted]   = useState(false)
+  const [openDone,    setOpenDone]    = useState(false)
   const [sadanFilled, setSadanFilled] = useState({})   // { questionId: true } — gold flash
   const flashTimers = useRef({})
 
@@ -412,14 +411,12 @@ export default function Quiz() {
     return () => window.removeEventListener('sadan:action', onAction)
   }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // שמירה אוטומטית לכל שינוי מצב
+  // ניקוי localStorage בכניסה (דמו — תמיד מתחילים נקי)
   useEffect(() => {
-    localStorage.setItem(LS_KEY, JSON.stringify({ answers, submitted, openDone }))
-  }, [answers, submitted, openDone])
-
-  // ניקוי localStorage כשיוצאים לאישורים (סיום תהליך)
-  function goToApprovals() {
     localStorage.removeItem(LS_KEY)
+  }, [])
+
+  function goToApprovals() {
     navigate('/approvals')
   }
 

@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import SadanChat from './components/common/SadanChat'
+import VoiceStatusOrb from './components/common/VoiceStatusOrb'
+import DemoControlPanel from './components/common/DemoControlPanel'
 
 import Login          from './screens/Login'
 import FieldSelection  from './screens/FieldSelection'
@@ -37,8 +39,12 @@ export default function App() {
 
       {/* SadanChat — מחוץ ל-wrapper כדי שלא יידחף */}
       <SadanChatWrapper />
+      {/* VoiceStatusOrb — אייקון קולי קבוע פינה ימנית עליונה */}
+      <VoiceStatusOrbWrapper />
       {/* NavigationController — מקשיב לפקודות ניווט מהצ'אט */}
       <NavigationController />
+      {/* DemoControlPanel — נסתר כברירת מחדל, Ctrl+Shift+→ לדילוג בין שלבי הדמו */}
+      <DemoControlPanel />
     </BrowserRouter>
   )
 }
@@ -49,19 +55,38 @@ const NO_CHAT_PATHS = new Set(['/', '/demo-check'])
 
 function SadanChatWrapper() {
   const { pathname } = useLocation()
-  return <SadanChat visible={!NO_CHAT_PATHS.has(pathname)} />
+  return <SadanChat visible={!NO_CHAT_PATHS.has(pathname)} currentScreen={pathname} />
+}
+
+function VoiceStatusOrbWrapper() {
+  const { pathname } = useLocation()
+  // Hide on login (has its own mic UI) and demo-check
+  return <VoiceStatusOrb visible={!NO_CHAT_PATHS.has(pathname)} />
 }
 
 // ── SADAN navigation controller — listens to voice/text nav commands ──
+// Blocks navigation away from login until user has authenticated.
 function NavigationController() {
-  const navigate = useNavigate()
+  const navigate   = useNavigate()
+  const { pathname } = useLocation()
+  const authedRef  = useRef(false)   // set to true after sadan:authenticated event
+
+  useEffect(() => {
+    function onAuth() { authedRef.current = true }
+    window.addEventListener('sadan:authenticated', onAuth)
+    return () => window.removeEventListener('sadan:authenticated', onAuth)
+  }, [])
+
   useEffect(() => {
     const handle = (e) => {
       const { path } = e.detail
-      if (path) navigate(path)
+      if (!path) return
+      // Block voice navigation away from login unless authenticated
+      if (pathname === '/' && !authedRef.current) return
+      navigate(path)
     }
     window.addEventListener('sadan:navigate', handle)
     return () => window.removeEventListener('sadan:navigate', handle)
-  }, [navigate])
+  }, [navigate, pathname])
   return null
 }

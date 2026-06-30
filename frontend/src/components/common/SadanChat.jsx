@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { MessageSquare, ChevronLeft, Mic, MicOff, Volume2, Send, Loader } from 'lucide-react'
+import { MessageSquare, ChevronLeft, Volume2, Send, Loader } from 'lucide-react'
 import { sendWhatsAppMedia, sendWhatsApp } from '../../api/whatsapp'
 import { CONTACTS, buildSisoAirforceMessage } from '../../data/contacts'
 
@@ -230,7 +230,7 @@ const SADAN_COMMANDS = [
     re: /כשיר[ות]?\s*(?:דרג[הת]?)?\s*ב(?:ית)?(?:\s|$)|מדרג[הת]\s*ב(?:\s|$)|רמ[הת]\s*ב(?:\s|$)/i,
     handler: () => {
       simDispatch('fillField', { field_id: 'readiness', value: 'bet' })
-      return { handled: true, reply: '✅ רמת כשירות **ב׳** נבחרה בשאלון.\n\n⚠️ נדרש קצין מאשר מדרגת סמ"ה ומעלה.' }
+      return { handled: true, reply: '✅ רמת כשירות **ב׳** נבחרה בשאלון.\n\n⚠️ נדרש קצין מאשר מדרגת סא"ל ומעלה.' }
     },
   },
   // כשירות ג
@@ -473,6 +473,120 @@ const SADAN_COMMANDS = [
       return { handled: true, reply: '✅ עוברת לסבב האישורים...' }
     },
   },
+
+  // התקשר לגורם ספציפי — ניווט לאישורים + הודעה
+  {
+    re: /(?:תתקשר|התקשר|חייג|שיחה?|אישור.?טלפוני?).{0,12}(?:רטג|ר\.ט\.ג|שטחים|קרן|james)/i,
+    handler: () => {
+      simDispatch('sadan:navigate', { path: '/approvals' })
+      simDispatch('sadan:action',   { action: 'select_party', party_id: 'rtg' })
+      return { handled: true, reply: '📞 עוברת לאישורים — בחרתי רטג (קרן ג׳ימס). לחץ "התקשר" להתחלת השיחה.' }
+    },
+  },
+  {
+    re: /(?:תתקשר|התקשר|חייג|שיחה?|אישור.?טלפוני?).{0,12}(?:בטיחות?|safety)/i,
+    handler: () => {
+      simDispatch('sadan:navigate', { path: '/approvals' })
+      simDispatch('sadan:action',   { action: 'select_party', party_id: 'safety' })
+      return { handled: true, reply: '📞 עוברת לאישורים — בחרתי בטיחות. לחץ "התקשר".' }
+    },
+  },
+  {
+    re: /(?:תתקשר|התקשר|חייג|שיחה?|אישור.?טלפוני?).{0,12}(?:תחמוש?|ammo)/i,
+    handler: () => {
+      simDispatch('sadan:navigate', { path: '/approvals' })
+      simDispatch('sadan:action',   { action: 'select_party', party_id: 'ammo' })
+      return { handled: true, reply: '📞 עוברת לאישורים — בחרתי תחמוש. לחץ "התקשר".' }
+    },
+  },
+  // התקשר אלי / שיחת אישור כללי
+  {
+    re: /התקשר.?אל[יי]|תתקשר.?אל[יי]|call.?me|שיחת.?(אישור|טלפון)|תתקשר|חייג/i,
+    handler: () => {
+      simDispatch('sadan:navigate', { path: '/approvals' })
+      return { handled: true, reply: '📞 עוברת למסך האישורים. בחר גורם ולחץ "התקשר".' }
+    },
+  },
+
+  // ── PTT — הפעלה/כיבוי ─────────────────────────────────────────────────────
+  {
+    re: /עבר[יי].*(ptt|לחיצה|push.?to.?talk)|הפעל.*(ptt|לחיצה)|ptt.*הפעל|עבור.*ptt/i,
+    handler: () => {
+      simDispatch('sadan:ptt_mode', { enabled: true })
+      return {
+        handled: true,
+        reply: '🎙️ מצב PTT מופעל.\n\nלחץ וחזור **רווח** כדי לדבר — שחרר כדי לשתוק.\n\nניתן לכבות עם "סדן כבי PTT".',
+      }
+    },
+  },
+  {
+    re: /כב[יה].*(ptt|לחיצה|push.?to.?talk)|ptt.*כב[יה]|בטל.*ptt|vad|always.?on/i,
+    handler: () => {
+      simDispatch('sadan:ptt_mode', { enabled: false })
+      return {
+        handled: true,
+        reply: '🎙️ מצב PTT כובה — חזרה למצב האזנה רציף (VAD).',
+      }
+    },
+  },
+
+  // ── ניווט טאבים בתיק תרגיל ─────────────────────────────────────────────────
+  {
+    re: /כלל[יי]|מידע.?כלל/i,
+    handler: () => {
+      simDispatch('sadan:open_tab', { tab_id: 'general' })
+      return { handled: true, reply: '📋 פתחתי את טאב **כללי**.' }
+    },
+  },
+  {
+    re: /בטיח(ות)?(?!.{0,4}(ירי|שדה|קצין))|^בטיחות$/i,
+    handler: () => {
+      simDispatch('sadan:open_tab', { tab_id: 'safety' })
+      return { handled: true, reply: '🛡️ פתחתי את טאב **בטיחות**.' }
+    },
+  },
+  {
+    re: /ירי.?ושטח|שטח.?ירי|(?:פתח|עבור.?ל|תראה).{0,6}ירי/i,
+    handler: () => {
+      simDispatch('sadan:open_tab', { tab_id: 'fire' })
+      return { handled: true, reply: '🎯 פתחתי את טאב **ירי ושטחים**.' }
+    },
+  },
+  {
+    re: /נת.?ב(ים)?/i,
+    handler: () => {
+      simDispatch('sadan:open_tab', { tab_id: 'natbam' })
+      return { handled: true, reply: '⚠️ פתחתי את טאב **נת"בים**.' }
+    },
+  },
+  {
+    re: /לוגיסטיק(ה|י)|אג.?מ.{0,6}טאב/i,
+    handler: () => {
+      simDispatch('sadan:open_tab', { tab_id: 'logistics' })
+      return { handled: true, reply: '📦 פתחתי את טאב **לוגיסטיקה**.' }
+    },
+  },
+  {
+    re: /תדריך|תדרוך/i,
+    handler: () => {
+      simDispatch('sadan:open_tab', { tab_id: 'briefing' })
+      return { handled: true, reply: '📢 פתחתי את טאב **תדריך**.' }
+    },
+  },
+  {
+    re: /שת.?פ.{0,6}(טאב|יחידות|פתח)|(?:פתח|עבור.?ל).{0,6}שת.?פ/i,
+    handler: () => {
+      simDispatch('sadan:open_tab', { tab_id: 'collab' })
+      return { handled: true, reply: '🤝 פתחתי את טאב **שת"פ יחידות**.' }
+    },
+  },
+  {
+    re: /נוהל.?קרב|(?:פתח|עבור.?ל).{0,6}(קרב|נוהל)/i,
+    handler: () => {
+      simDispatch('sadan:open_tab', { tab_id: 'combat' })
+      return { handled: true, reply: '⚔️ פתחתי את טאב **נוהל קרב**.' }
+    },
+  },
 ]
 
 // ── dispatch + match ──────────────────────────────────────────────────────────
@@ -580,7 +694,7 @@ function LiveWaveform({ analyserRef, active }) {
 }
 
 // ── Main component ─────────────────────────────────────────
-export default function SadanChat({ autoOpen = false, visible = true }) {
+export default function SadanChat({ autoOpen = false, visible = true, currentScreen = '/' }) {
   const [open, setOpen]           = useState(autoOpen)
   const [messages, setMessages]   = useState([{
     id: 0,
@@ -593,20 +707,26 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
   const [listening, setListening] = useState(false)
   const [speaking, setSpeaking]   = useState(false)
   const [error, setError]         = useState(null)
+  const [pttMode, setPttMode]     = useState(false)   // PTT mode on/off
+  const [pttActive, setPttActive] = useState(false)   // spacebar currently held
 
   // Audio refs
   const wsRef             = useRef(null)
   const micContextRef     = useRef(null)
   const playContextRef    = useRef(null)
   const processorRef      = useRef(null)
-  const analyserRef       = useRef(null)
+  const analyserRef       = useRef(null)   // mic analyser
+  const playAnalyserRef   = useRef(null)   // playback analyser (Gemini audio)
   const micStreamRef      = useRef(null)
   const nextPlayTime      = useRef(0)
   const activeSources     = useRef([])
   const messagesEnd       = useRef(null)
   const liveTranscript    = useRef({ user: null, assistant: null })  // { id, accumulated } | null
   const speakingRef       = useRef(false)   // mirrors speaking state — readable from ScriptProcessor closure
+  const speakingEndTimer  = useRef(null)    // timer to re-enable mic after Gemini finishes speaking
   const sendingRef        = useRef(false)   // synchronous in-flight guard — prevents race condition on double-send
+  const pttModeRef        = useRef(false)   // mirrors pttMode — readable from onaudioprocess closure
+  const pttActiveRef      = useRef(false)   // mirrors pttActive — readable from onaudioprocess closure
   // Auto-reconnect
   const wantConnected     = useRef(false)   // user intent: true = stay connected
   const reconnectTimer    = useRef(null)
@@ -637,13 +757,84 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
   }, [])
 
   // sadanVoiceConnect — Login screen triggers this to start voice without opening the panel
+  // Note: connectVoice is NOT in deps (it's defined later in the file, TDZ issue).
+  // Safe because connectVoice's own deps include `connected`, so it always changes with it.
+  const connectVoiceRef    = useRef(null)
+  const disconnectVoiceRef = useRef(null)
+  const connectedRef       = useRef(false)
+  useEffect(() => { connectedRef.current = connected }, [connected])
+
   useEffect(() => {
     function onVoiceConnect() {
-      if (!connected) connectVoice()
+      if (!connectedRef.current) connectVoiceRef.current?.()
     }
     window.addEventListener('sadanVoiceConnect', onVoiceConnect)
     return () => window.removeEventListener('sadanVoiceConnect', onVoiceConnect)
-  }, [connected, connectVoice])
+  }, [])
+
+  // sadanVoiceToggle — VoiceStatusOrb dispatches this on click
+  // Connects (+ opens panel) when idle, disconnects when active.
+  useEffect(() => {
+    function onVoiceToggle() {
+      if (connectedRef.current) {
+        disconnectVoiceRef.current?.()
+      } else {
+        setOpen(true)
+        connectVoiceRef.current?.()
+      }
+    }
+    window.addEventListener('sadanVoiceToggle', onVoiceToggle)
+    return () => window.removeEventListener('sadanVoiceToggle', onVoiceToggle)
+  }, [])
+
+  // Broadcast voice state → VoiceStatusOrb listens to this
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('sadan:voice_state', {
+      detail: { connected, listening, speaking }
+    }))
+  }, [connected, listening, speaking])
+
+  // PTT mode toggle — driven by sadan:ptt_mode event (dispatched by SADAN_COMMANDS)
+  useEffect(() => {
+    function onPttMode(e) {
+      const enabled = !!e.detail?.enabled
+      setPttMode(enabled)
+      pttModeRef.current = enabled
+      if (!enabled) {
+        // leaving PTT — release active hold if any
+        setPttActive(false)
+        pttActiveRef.current = false
+      }
+    }
+    window.addEventListener('sadan:ptt_mode', onPttMode)
+    return () => window.removeEventListener('sadan:ptt_mode', onPttMode)
+  }, [])
+
+  // Spacebar hold → PTT active (only when connected + PTT mode on)
+  useEffect(() => {
+    if (!connected) return
+    function onKeyDown(e) {
+      if (e.code !== 'Space' || e.repeat) return
+      if (!pttModeRef.current) return
+      // Don't intercept space when typing in input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+      e.preventDefault()
+      setPttActive(true)
+      pttActiveRef.current = true
+    }
+    function onKeyUp(e) {
+      if (e.code !== 'Space') return
+      if (!pttModeRef.current) return
+      setPttActive(false)
+      pttActiveRef.current = false
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+    }
+  }, [connected])
 
   // Toggle body class → compresses .sadan-main-content into remaining space
   useEffect(() => {
@@ -665,6 +856,14 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
   // Transcript: accumulate partial chunks into a live bubble, finalize on turn_complete.
   // liveTranscript.current[role] = { id, accumulated } | null
   function handleTranscript(role, text, final) {
+    // Verbal disconnect — user says "תנתק" / "אמשיך לבד" etc.
+    // Gemini will respond with a goodbye naturally; we disconnect after ~4s to let it finish.
+    if (role === 'user' && final) {
+      if (/תנתק|ניתוק|אמשיך.{0,4}לבד|תודה.{0,8}(לא.{0,4}צריך|סיימנו|מספיק)|לא.{0,4}צריך.{0,8}עזרה/i.test(text)) {
+        setTimeout(() => disconnectVoiceRef.current?.(), 4500)
+      }
+    }
+
     const live = liveTranscript.current[role]
     if (live) {
       // We have an open bubble — append only the NEW text.
@@ -705,6 +904,8 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
       playContextRef.current = new AudioContext({ sampleRate: 24000 })
     }
     const ctx = playContextRef.current
+    // Browser suspends AudioContext when no user gesture is recent — resume it.
+    if (ctx.state === 'suspended') ctx.resume()
     const int16 = new Int16Array(buffer)
     if (int16.length === 0) return
 
@@ -714,9 +915,17 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
     const ab = ctx.createBuffer(1, f32.length, 24000)
     ab.getChannelData(0).set(f32)
 
+    // Ensure playback analyser exists and is connected to this context
+    if (!playAnalyserRef.current || playAnalyserRef.current.context !== ctx) {
+      const a = ctx.createAnalyser()
+      a.fftSize = 256
+      a.connect(ctx.destination)
+      playAnalyserRef.current = a
+    }
+
     const src = ctx.createBufferSource()
     src.buffer = ab
-    src.connect(ctx.destination)
+    src.connect(playAnalyserRef.current)
 
     const now = ctx.currentTime
     const startAt = Math.max(now, nextPlayTime.current)
@@ -726,6 +935,8 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
     activeSources.current.push(src)
     setSpeaking(true)
     speakingRef.current = true
+    // Cancel any pending "re-enable mic" timer — new audio chunk arrived
+    clearTimeout(speakingEndTimer.current)
     src.onended = () => {
       activeSources.current = activeSources.current.filter(s => s !== src)
       if (activeSources.current.length === 0) {
@@ -733,11 +944,11 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
         // ~200-500ms of audio buffered after Web Audio marks the buffer done.
         // If we re-enable the mic too early, it picks up the tail of SADAN's own
         // voice, Gemini transcribes it, and SADAN replies to itself (self-echo).
-        // 700ms covers even slow USB audio interfaces.
-        setTimeout(() => {
+        // 1800ms: increased from 1200 — covers room reverberation + inter-chunk gaps.
+        speakingEndTimer.current = setTimeout(() => {
           setSpeaking(false)
           speakingRef.current = false
-        }, 700)
+        }, 1800)
       }
     }
   }
@@ -746,6 +957,7 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
     activeSources.current.forEach(s => { try { s.stop() } catch (_) {} })
     activeSources.current = []
     if (playContextRef.current) nextPlayTime.current = playContextRef.current.currentTime
+    clearTimeout(speakingEndTimer.current)
     setSpeaking(false)
     speakingRef.current = false
   }
@@ -766,6 +978,16 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
     wantConnected.current = true
     setError(null)
     try {
+      // Pre-initialize playback AudioContext during the user gesture so the browser
+      // starts it in 'running' state. If we wait until the first audio chunk arrives
+      // (seconds later), the browser may have suspended it already.
+      if (!playContextRef.current || playContextRef.current.state === 'closed') {
+        playContextRef.current = new AudioContext({ sampleRate: 24000 })
+      }
+      if (playContextRef.current.state === 'suspended') {
+        playContextRef.current.resume()
+      }
+
       // Mic stream — echo cancellation prevents Gemini hearing its own audio output
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -795,6 +1017,8 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
         if (wsRef.current?.readyState !== WebSocket.OPEN) return
         // Don't send mic audio while Gemini is speaking — prevents echo self-triggering
         if (speakingRef.current) return
+        // PTT gate: in PTT mode, only send while spacebar (or touch button) is held
+        if (pttModeRef.current && !pttActiveRef.current) return
         const f32 = e.inputBuffer.getChannelData(0)
         const i16 = new Int16Array(f32.length)
         for (let i = 0; i < f32.length; i++) i16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768))
@@ -812,15 +1036,14 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
         setListening(true)
         // Notify any screen listening for voice connection status (e.g. Login)
         window.dispatchEvent(new CustomEvent('sadan:voice_status', { detail: { status: 'connected' } }))
-        // Login-screen greeting — show as assistant message
-        const isLoginScreen = window.location.pathname === '/'
-        if (isLoginScreen) {
-          setMessages(prev => [...prev, {
-            id: Date.now() + Math.random(),
-            role: 'assistant',
-            content: 'שלום! אני סדן 👋\n\nאנא אמור את הקוד האישי שלך כדי להתחבר למערכת.',
-          }])
+
+        // If already authenticated in this session, tell backend to skip auth flow
+        if (sessionStorage.getItem('sadan_authenticated')) {
+          const skipGreeting = sessionStorage.getItem('sadan_skip_greeting') === 'true'
+          sessionStorage.removeItem('sadan_skip_greeting')  // one-time flag — consume immediately
+          ws.send(JSON.stringify({ type: 'auth_context', authenticated: true, skip_greeting: skipGreeting }))
         }
+
       }
 
       ws.onmessage = (e) => {
@@ -831,15 +1054,17 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
             const msg = JSON.parse(e.data)
             if (msg.type === 'interrupted') {
               stopPlayback()
-              closeLiveTranscripts()  // discard any open partial bubbles (user interrupted)
+              closeLiveTranscripts()
+              window.dispatchEvent(new CustomEvent('sadan:voice_status', { detail: { status: 'sadan_idle' } }))
             } else if (msg.type === 'turn_complete') {
-              // ⚠️  Do NOT call closeLiveTranscripts() here.
-              // Gemini sometimes sends turn_complete BEFORE the final transcript event.
-              // If we null liveTranscript here, the final transcript creates a second
-              // bubble with the same content → duplicate reply visible in chat.
-              // The final transcript (final=true) will close the bubble itself.
+              setTimeout(() => closeLiveTranscripts(), 250)
+              window.dispatchEvent(new CustomEvent('sadan:voice_status', { detail: { status: 'sadan_idle' } }))
             } else if (msg.type === 'transcript') {
               handleTranscript(msg.role, msg.text, msg.final)
+              // כשסדן מתחיל לדבר — עדכן Login ואחרים
+              if (msg.role === 'assistant') {
+                window.dispatchEvent(new CustomEvent('sadan:voice_status', { detail: { status: 'sadan_speaking' } }))
+              }
             } else if (msg.type === 'whatsapp_sent') {
               setMessages(prev => [...prev, {
                 id: Date.now() + Math.random(),
@@ -902,9 +1127,62 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
       ws.onerror  = () => { setError('שגיאת חיבור — בדוק שהשרת פועל'); setConnected(false); setListening(false) }
 
     } catch (e) {
-      console.error('connectVoice:', e)
       setError('אין גישה למיקרופון')
     }
+  }, [connected])
+
+  // Sync connectVoice ref (disconnectVoice ref synced below, after it's defined)
+  connectVoiceRef.current = connectVoice
+
+  // ── Screen sync — notify Gemini when user navigates ───────
+  const screenSentRef = useRef('')
+  useEffect(() => {
+    if (!connected || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
+    if (currentScreen === '/' || currentScreen === '/demo-check') return
+    if (currentScreen === screenSentRef.current) return
+    screenSentRef.current = currentScreen
+
+    // Just logged in on the same WS session — skip first screen_change so Gemini
+    // doesn't greet again. Consume the flag here (ws.onopen won't fire on same session).
+    if (sessionStorage.getItem('sadan_skip_greeting') === 'true') {
+      sessionStorage.removeItem('sadan_skip_greeting')
+      return  // silent — Gemini already said goodbye on login screen
+    }
+
+    wsRef.current.send(JSON.stringify({ type: 'screen_change', screen: currentScreen }))
+  }, [connected, currentScreen])
+
+  // Reset screenSentRef on disconnect so reconnect re-sends the current screen
+  useEffect(() => {
+    if (!connected) screenSentRef.current = ''
+  }, [connected])
+
+  // ── Real-time audio level → Login waveform ────────────────
+  // Dispatches sadan:audio_level {level:0-1} at ~30fps when connected.
+  // Reads from both mic analyser (user speaking) and playback analyser (Gemini speaking).
+  useEffect(() => {
+    if (!connected) return
+    const buf = new Uint8Array(128)
+    let raf
+    function tick() {
+      let level = 0
+      // Playback (Gemini)
+      if (playAnalyserRef.current) {
+        playAnalyserRef.current.getByteFrequencyData(buf)
+        const avg = buf.reduce((s, v) => s + v, 0) / buf.length
+        level = Math.max(level, avg / 128)
+      }
+      // Mic (user)
+      if (analyserRef.current) {
+        analyserRef.current.getByteFrequencyData(buf)
+        const avg = buf.reduce((s, v) => s + v, 0) / buf.length
+        level = Math.max(level, avg / 128)
+      }
+      window.dispatchEvent(new CustomEvent('sadan:audio_level', { detail: { level } }))
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
   }, [connected])
 
   const disconnectVoice = useCallback(() => {
@@ -914,6 +1192,9 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
     setConnected(false)
     setListening(false)
   }, [])
+
+  // Sync disconnectVoice ref here — after it's defined (avoids TDZ error)
+  disconnectVoiceRef.current = disconnectVoice
 
   const toggleVoice = () => connected ? disconnectVoice() : connectVoice()
 
@@ -950,8 +1231,16 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
   }
 
   // Status
-  const statusLabel = speaking ? 'סדן מדבר...' : listening ? 'מקשיב...' : 'לחץ מיקרופון'
-  const statusDot   = speaking ? 'bg-blue-400 animate-pulse' : listening ? 'bg-green-400 animate-pulse' : 'bg-gray-500'
+  const statusLabel = speaking
+    ? 'סדן מדבר...'
+    : pttMode
+      ? pttActive ? '🔴 מקליט...' : 'PTT — לחץ רווח לדבר'
+      : listening ? 'מקשיב...' : 'לחץ מיקרופון'
+  const statusDot = speaking
+    ? 'bg-blue-400 animate-pulse'
+    : pttMode
+      ? pttActive ? 'bg-red-500 animate-pulse' : 'bg-yellow-400'
+      : listening ? 'bg-green-400 animate-pulse' : 'bg-gray-500'
 
   // When on a hidden path (login / field-selection / quiz) render nothing visually.
   // The component stays mounted → all hooks/refs/WS stay alive → context preserved.
@@ -960,16 +1249,18 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
 
   return (
     <>
-      {/* ── כפתור פתיחה — נראה רק כשהפאנל סגור ─────────── */}
+      {/* ── כפתור פתיחה — 💬 קטן, שקט, פינה שמאל תחתון ──── */}
       <button
         onClick={() => setOpen(true)}
-        className={`fixed bottom-20 left-6 z-40 flex items-center gap-2 bg-[#c6953b] hover:bg-[#b5842a]
-                   text-black font-bold px-4 py-3 rounded-full shadow-2xl transition-all hover:scale-105
+        className={`fixed bottom-6 left-6 z-40 w-10 h-10 rounded-full flex items-center justify-center
+                   bg-[#111827] border border-[#c6953b]/30 text-[#c6953b]
+                   hover:bg-[#c6953b]/15 hover:border-[#c6953b]/60 hover:scale-110
+                   shadow-lg transition-all
                    ${open ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
-        style={{ transition: 'opacity 0.2s ease' }}
+        style={{ transition: 'opacity 0.2s ease, transform 0.15s ease' }}
+        title="שיחה / transcript"
       >
-        <MessageSquare size={20} />
-        <span className="text-sm">סדן</span>
+        <MessageSquare size={16} />
       </button>
 
       {/* ── פאנל צ'אט — תמיד ב-DOM, מחליק פנימה/החוצה ──── */}
@@ -990,7 +1281,14 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-[#c6953b] flex items-center justify-center text-sm font-bold text-black">ס</div>
                 <div>
-                  <div className="text-white font-bold text-sm">סדן</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-white font-bold text-sm">סדן</div>
+                    {connected && (
+                      <span className="text-[9px] text-gray-500 border border-gray-700 rounded px-1 py-0.5 leading-none">
+                        transcript
+                      </span>
+                    )}
+                  </div>
                   <div className="text-[10px] text-gray-400 flex items-center gap-1">
                     <span className={`w-1.5 h-1.5 rounded-full inline-block ${statusDot}`} />
                     {statusLabel}
@@ -1027,13 +1325,49 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
               </div>
             )}
 
-            {/* Waveform — מוצגת כשמחובר */}
+            {/* Waveform / PTT — מוצגת כשמחובר */}
             {connected && (
-              <div className="mx-3 mb-2 px-4 py-3 bg-[#111827] border border-[#c6953b]/20 rounded-xl flex flex-col items-center gap-1 flex-shrink-0">
-                <LiveWaveform analyserRef={analyserRef} active={listening && !speaking} />
-                <span className="text-[10px] text-gray-500 mt-0.5">
-                  {speaking ? '💬 סדן מדבר' : '🎙️ מקשיב — דבר עכשיו'}
-                </span>
+              <div className={`mx-3 mb-2 px-4 py-3 rounded-xl flex flex-col items-center gap-1 flex-shrink-0 border transition-colors
+                ${pttActive
+                  ? 'bg-red-900/30 border-red-500/50'
+                  : pttMode
+                    ? 'bg-[#1a1f2e] border-yellow-500/30'
+                    : 'bg-[#111827] border-[#c6953b]/20'
+                }`}
+              >
+                {/* PTT mode: touch button + hint text */}
+                {pttMode ? (
+                  <>
+                    <button
+                      onPointerDown={() => { setPttActive(true); pttActiveRef.current = true }}
+                      onPointerUp={() => { setPttActive(false); pttActiveRef.current = false }}
+                      onPointerLeave={() => { setPttActive(false); pttActiveRef.current = false }}
+                      className={`w-14 h-14 rounded-full flex items-center justify-center font-bold text-xl select-none transition-all
+                        ${pttActive
+                          ? 'bg-red-500 text-white scale-95 shadow-lg shadow-red-500/40'
+                          : 'bg-yellow-500/20 text-yellow-400 border-2 border-yellow-500/40 hover:bg-yellow-500/30'
+                        }`}
+                      style={{ touchAction: 'none' }}
+                    >
+                      🎙️
+                    </button>
+                    <span className="text-[10px] mt-0.5 text-center leading-tight"
+                      style={{ color: pttActive ? '#ef4444' : '#eab308' }}>
+                      {pttActive ? '🔴 מקליט — שחרר לסיום' : 'לחץ רווח / כפתור לדבר'}
+                    </span>
+                    {/* PTT badge */}
+                    <span className="text-[9px] text-yellow-600 bg-yellow-900/30 px-2 py-0.5 rounded-full border border-yellow-700/30">
+                      מצב PTT פעיל
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <LiveWaveform analyserRef={analyserRef} active={listening && !speaking} />
+                    <span className="text-[10px] text-gray-500 mt-0.5">
+                      {speaking ? '💬 סדן מדבר' : '🎙️ מקשיב — דבר עכשיו'}
+                    </span>
+                  </>
+                )}
               </div>
             )}
 
@@ -1062,19 +1396,6 @@ export default function SadanChat({ autoOpen = false, visible = true }) {
                            placeholder:text-gray-500 disabled:opacity-50"
                 dir="rtl"
               />
-
-              {/* מיקרופון */}
-              <button
-                onClick={toggleVoice}
-                className={`flex-shrink-0 p-1.5 rounded-full transition-all
-                  ${connected
-                    ? 'bg-[#c6953b]/20 text-[#c6953b] ring-1 ring-[#c6953b]/40'
-                    : 'text-gray-400 hover:text-[#c6953b]'
-                  }`}
-                title={connected ? 'נתק שיחה קולית' : 'התחל שיחה קולית'}
-              >
-                {connected ? <Mic size={18} /> : <MicOff size={18} />}
-              </button>
 
               {/* עצור השמעה */}
               {speaking && (

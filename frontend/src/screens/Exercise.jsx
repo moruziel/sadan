@@ -547,7 +547,7 @@ function GeneralContent({ section }) {
 
       {/* RULES-001 */}
       <div className="bg-yellow-50 border border-yellow-300 rounded-xl px-4 py-2.5 mb-4 text-sm text-yellow-800 flex items-center gap-2">
-        ⚠️ קצין מאשר חייב להיות מדרגת סמ"ה ומעלה.
+        ⚠️ קצין מאשר חייב להיות מדרגת סא"ל ומעלה.
       </div>
 
       <div className="space-y-2">
@@ -614,6 +614,16 @@ export default function Exercise() {
     setActiveId(id)
     setVisited(prev => new Set([...prev, id]))
   }
+
+  // SADAN voice — open tab by id
+  useEffect(() => {
+    function onOpenTab(e) {
+      const { tab_id } = e.detail ?? {}
+      if (tab_id) handleTabClick(tab_id)
+    }
+    window.addEventListener('sadan:open_tab', onOpenTab)
+    return () => window.removeEventListener('sadan:open_tab', onOpenTab)
+  }, [])
 
   const canProceed = visited.has('fire') && visited.has('natbam')
 

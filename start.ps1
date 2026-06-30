@@ -1,17 +1,29 @@
-# ============================================================
+﻿# ============================================================
 #  SADAN - Start All Services
 #  Run: powershell -ExecutionPolicy Bypass -File C:\Users\moruziel\sadan\start.ps1
+#
+#  מעלה את כל השירותים ממצב לא-ידוע, מאמת בפועל (לא רק "פורט פתוח") שכל
+#  שירות מוכן, ומתקן אוטומטית תקלות ידועות (session וואטסאפ נעול/פגום).
+#  אם משהו דורש פעולה ידנית (כמו סריקת QR) — הסקריפט מסביר בדיוק מה לעשות.
+#
+#  לפני דמו, הרץ גם: powershell -ExecutionPolicy Bypass -File test-system.ps1
+#  (בודק שיחה אמיתית + הודעת וואטסאפ אמיתית יוצאות בהצלחה — ר' CLAUDE.md סעיף 19)
 # ============================================================
 
 $ROOT        = "C:\Users\moruziel\sadan"
 $WADIR       = "$ROOT\demo_assets\whatsapp_server"
+$WAAUTH      = "$WADIR\.wwebjs_auth"
 $CFOUT       = "$env:TEMP\sadan_cf_out.log"
 $CFERR       = "$env:TEMP\sadan_cf_err.log"
 $CLOUDFLARED = "C:\Program Files (x86)\cloudflared\cloudflared.exe"
+$ENVPATH     = "$ROOT\backend\.env"
+
+. "$ROOT\scripts\sadan-checks.ps1"
 
 function Write-Step { param($msg) Write-Host "`n$msg" -ForegroundColor Cyan }
 function Write-OK   { param($msg) Write-Host "  [OK] $msg" -ForegroundColor Green }
 function Write-Warn { param($msg) Write-Host "  [!!] $msg" -ForegroundColor Yellow }
+function Write-Err  { param($msg) Write-Host "  [XX] $msg" -ForegroundColor Red }
 
 function Port-InUse {
     param($port)
@@ -26,11 +38,23 @@ Write-Host "======================================================" -ForegroundC
 
 # ── 1. WhatsApp server ───────────────────────────────────────
 Write-Step "1. WhatsApp server (port 3001)"
-if (Port-InUse 3001) {
-    Write-OK "Already running - skipping"
-} else {
+if (-not (Port-InUse 3001)) {
     Start-Process powershell -ArgumentList @("-NoExit", "-Command", "cd '$WADIR'; node server.js") -WindowStyle Normal
-    Write-OK "Started in new window"
+    Write-OK "הופעל בחלון חדש"
+    Start-Sleep 6
+}
+
+$waCheck = Test-WhatsAppReady
+if (-not $waCheck.ok -and $waCheck.detail -like "*לא מגיב*") {
+    # נכשל לעלות בכלל — לרוב session נעול/פגום (EBUSY ב-Windows). ננקה ונסה שוב פעם אחת.
+    Write-Warn "WhatsApp server לא עלה — בודק session ישן..."
+    if (Test-Path $WAAUTH) {
+        Write-Warn "מוחק session ישן ($WAAUTH) ומנסה שוב..."
+        Remove-Item $WAAUTH -Recurse -Force -ErrorAction SilentlyContinue
+        Start-Process powershell -ArgumentList @("-NoExit", "-Command", "cd '$WADIR'; node server.js") -WindowStyle Normal
+        Start-Sleep 8
+        $waCheck = Test-WhatsAppReady
+    }
 }
 
 # ── 2. Cloudflare tunnel ─────────────────────────────────────
@@ -42,7 +66,7 @@ if (Test-Path $CFERR) { Remove-Item $CFERR -Force -ErrorAction SilentlyContinue 
 Start-Process $CLOUDFLARED -ArgumentList @("tunnel", "--url", "http://localhost:8000", "--protocol", "http2") -RedirectStandardOutput $CFOUT -RedirectStandardError $CFERR -WindowStyle Hidden
 
 $tunnelUrl = $null
-Write-Host "  Waiting for URL" -NoNewline
+Write-Host "  ממתין לכתובת" -NoNewline
 for ($i = 0; $i -lt 30; $i++) {
     Start-Sleep 1
     Write-Host "." -NoNewline
@@ -57,85 +81,95 @@ for ($i = 0; $i -lt 30; $i++) {
 Write-Host ""
 
 if ($tunnelUrl) {
-    Write-OK "https://$tunnelUrl"
-    $envPath = "$ROOT\backend\.env"
-    $envContent = Get-Content $envPath -Raw
+    # -Encoding UTF8 קריטי: בלי זה PowerShell 5.1 קורא קבצים בלי BOM לפי codepage
+    # מקומי וגורם לקריסת קידוד (mojibake) לכל תו עברי בקובץ ב-round-trip הזה.
+    $envContent = Get-Content $ENVPATH -Raw -Encoding UTF8
     $envContent = $envContent -replace 'NGROK_HOST=.*', "NGROK_HOST=$tunnelUrl"
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-    [System.IO.File]::WriteAllText($envPath, $envContent, $utf8NoBom)
-    Write-OK ".env updated"
+    [System.IO.File]::WriteAllText($ENVPATH, $envContent, $utf8NoBom)
+    Write-OK ".env עודכן: $tunnelUrl"
 } else {
-    Write-Warn "Tunnel URL not found - keeping existing .env"
+    Write-Warn "לא התקבלה כתובת tunnel - נשארת הכתובת הקיימת ב-.env (כנראה לא תעבוד)"
 }
 
 # ── 3. Backend ───────────────────────────────────────────────
 Write-Step "3. Backend (port 8000)"
 if (Port-InUse 8000) {
-    Write-Warn "Port 8000 in use - restarting"
+    Write-Warn "פורט 8000 תפוס - מפעיל מחדש"
     $oldPid = (netstat -ano | Select-String ":8000 " | Select-String "LISTENING" | ForEach-Object { ($_ -split '\s+')[-1] } | Select-Object -First 1)
     if ($oldPid) { Stop-Process -Id ([int]$oldPid) -Force -ErrorAction SilentlyContinue }
     Start-Sleep 2
 }
 Start-Process powershell -ArgumentList @("-NoExit", "-Command", "cd '$ROOT'; python -m uvicorn backend.main:app --reload") -WindowStyle Normal
-Write-OK "Started in new window"
+Write-OK "הופעל בחלון חדש"
 
 # ── 4. Frontend ──────────────────────────────────────────────
 Write-Step "4. Frontend (port 5173)"
-if (Port-InUse 5173) {
-    Write-OK "Already running - skipping"
-} else {
+if (-not (Port-InUse 5173)) {
     Start-Process powershell -ArgumentList @("-NoExit", "-Command", "cd '$ROOT\frontend'; npm run dev") -WindowStyle Normal
-    Write-OK "Started in new window"
+    Write-OK "הופעל בחלון חדש"
 }
 
 # ── 5. Open browser ──────────────────────────────────────────
-Write-Step "5. Opening browser..."
-Start-Sleep 3
+Write-Step "5. פותח דפדפן..."
+Start-Sleep 4
 Start-Process "http://localhost:5173"
 
-# ── 6. Health checks ────────────────────────────────────────
-Write-Step "6. Health checks (waiting for backend...)"
-Start-Sleep 4
+# ── 6. Real health checks (with retry, not just "port open") ─
+Write-Step "6. בדיקות בריאות (ממתין לשירותים...)"
 
-$backendOk = $false
-for ($i = 0; $i -lt 5; $i++) {
-    try {
-        $r = Invoke-WebRequest "http://localhost:8000/docs" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
-        Write-OK "Backend (200)"
-        $backendOk = $true
-        break
-    } catch {
-        Start-Sleep 3
+function Wait-Check {
+    param($Name, $CheckBlock, $MaxTries = 8, $DelaySec = 3)
+    for ($i = 0; $i -lt $MaxTries; $i++) {
+        $result = & $CheckBlock
+        if ($result.ok) { return $result }
+        Start-Sleep $DelaySec
     }
-}
-if (-not $backendOk) { Write-Warn "Backend did not respond - check the backend window" }
-
-try {
-    $r = Invoke-WebRequest "http://localhost:3001/status" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
-    Write-OK "WhatsApp server (200)"
-} catch {
-    Write-Warn "WhatsApp server - no response"
+    return $result
 }
 
-try {
-    $r = Invoke-WebRequest "http://localhost:5173" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
-    Write-OK "Frontend (200)"
-} catch {
-    Write-Warn "Frontend - no response"
-}
+$backendResult  = Wait-Check -Name "Backend"  -CheckBlock { Test-Backend }
+$frontendResult = Wait-Check -Name "Frontend" -CheckBlock { Test-Frontend }
+$tunnelResult   = Wait-Check -Name "Tunnel"   -CheckBlock { Test-Tunnel -NgrokHost $tunnelUrl } -MaxTries 5
+$waResult       = Wait-Check -Name "WhatsApp" -CheckBlock { Test-WhatsAppReady } -MaxTries 10 -DelaySec 5
+$vonageResult   = Test-VonageConfig -EnvPath $ENVPATH
 
-# ── Summary ──────────────────────────────────────────────────
+# ── סיכום ──────────────────────────────────────────────────
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor Cyan
-if ($backendOk) {
-    Write-Host "  All services ready!" -ForegroundColor Green
+Write-Host "  סיכום מצב המערכת" -ForegroundColor Cyan
+Write-Host "======================================================" -ForegroundColor Cyan
+
+$checks = @(
+    @{ name = "Backend";  result = $backendResult }
+    @{ name = "Frontend"; result = $frontendResult }
+    @{ name = "Tunnel";   result = $tunnelResult }
+    @{ name = "WhatsApp"; result = $waResult }
+    @{ name = "Vonage";   result = $vonageResult }
+)
+
+$allOk = $true
+foreach ($c in $checks) {
+    if ($c.result.ok) {
+        Write-OK "$($c.name): $($c.result.detail)"
+    } else {
+        $allOk = $false
+        Write-Warn "$($c.name): $($c.result.detail)"
+        if ($c.result.fixHint) {
+            Write-Host "        → $($c.result.fixHint)" -ForegroundColor DarkYellow
+        }
+    }
+}
+
+Write-Host ""
+if ($allOk) {
+    Write-Host "  הכל מוכן! מומלץ להריץ test-system.ps1 לבדיקה אמיתית לפני דמו." -ForegroundColor Green
 } else {
-    Write-Host "  WARNING: Backend failed to start" -ForegroundColor Red
+    Write-Host "  יש פריטים שדורשים פעולה (ר' למעלה) לפני שהמערכת מוכנה לדמו." -ForegroundColor Yellow
 }
-Write-Host "  Frontend  : http://localhost:5173"
-Write-Host "  Backend   : http://localhost:8000/docs"
-Write-Host "  WhatsApp  : http://localhost:3001/qr"
-if ($tunnelUrl) {
-    Write-Host "  Tunnel    : https://$tunnelUrl" -ForegroundColor Green
-}
+Write-Host ""
+Write-Host "  Frontend : http://localhost:5173"
+Write-Host "  Backend  : http://localhost:8000/docs"
+Write-Host "  WhatsApp : http://localhost:3001/qr"
+if ($tunnelUrl) { Write-Host "  Tunnel   : https://$tunnelUrl" }
 Write-Host "======================================================" -ForegroundColor Cyan

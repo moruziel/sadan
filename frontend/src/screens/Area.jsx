@@ -299,57 +299,57 @@ export default function Area() {
     }
   }
 
-  // ── Single-field mode (legacy) ─────────────────────────
+  // ── Single-field mode — map fills full screen ─────────
   if (mode === 'single') {
     return (
       <div className="flex flex-col h-screen bg-demo-bg" dir="rtl">
         <Header currentPath="/area" />
         {showDiagram && <DataSourcesDiagram onClose={() => setShowDiagram(false)} />}
-        <div className="flex flex-1 overflow-hidden">
-          {/* פאנל ימין */}
-          <div className="w-80 bg-white text-gray-800 flex flex-col overflow-y-auto shadow-2xl">
-            <FieldInfoPanel
-              field={{
-                ...AREA_309,
-                available: true,
-                capabilities: AREA_309.capabilities,
-                hazards: AREA_309.hazards,
-                infrastructure: AREA_309.infrastructure,
-                history: AREA_309.history,
-              }}
-              onContinue={handleContinue}
-              showCalendar
-            />
+        <div className="flex-1 relative min-h-0 overflow-hidden">
+          <MapView layers={layers} />
+
+          {/* שכבות מידע — שמאל עליון */}
+          <div className="absolute top-4 left-3 z-10 flex flex-col gap-1.5">
+            <button
+              onClick={() => setShowDiagram(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-md bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm hover:text-demo-gold hover:border-demo-gold/40"
+            >
+              <Info size={13} />
+              מקורות
+            </button>
+            {LAYER_OPTIONS.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => toggleLayer(key)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all
+                  bg-black/40 backdrop-blur-sm
+                  ${layers[key]
+                    ? `border-2 ${key === 'natbam' ? 'border-red-400 text-red-300' : 'border-demo-gold text-demo-gold'}`
+                    : 'border border-white/20 text-gray-400'
+                  }`}
+              >
+                <Icon size={13} />
+                {label}
+              </button>
+            ))}
           </div>
 
-          {/* מפה */}
-          <div className="flex-1 relative min-h-0">
-            <MapView layers={layers} />
-            <div className="absolute top-28 left-3 z-10 flex flex-col gap-1.5">
-              {/* מקורות מידע */}
-              <button
-                onClick={() => setShowDiagram(true)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-md bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm hover:text-demo-gold hover:border-demo-gold/40"
-              >
-                <Info size={13} />
-                מקורות
-              </button>
-              {LAYER_OPTIONS.map(({ key, label, icon: Icon }) => (
-                <button
-                  key={key}
-                  onClick={() => toggleLayer(key)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all
-                    bg-black/40 backdrop-blur-sm
-                    ${layers[key]
-                      ? `border-2 ${key === 'natbam' ? 'border-red-400 text-red-300' : 'border-demo-gold text-demo-gold'}`
-                      : 'border border-white/20 text-gray-400'
-                    }`}
-                >
-                  <Icon size={13} />
-                  {label}
-                </button>
-              ))}
-            </div>
+          {/* כפתורי פעולה — ימין תחתון */}
+          <div className="absolute bottom-6 right-5 z-10 flex flex-col gap-2 items-end">
+            <button
+              onClick={() => handleContinue('calendar')}
+              className="flex items-center gap-2 px-4 py-2.5 bg-demo-surface/95 backdrop-blur-sm border border-demo-border text-demo-gold font-semibold rounded-xl text-sm shadow-lg hover:border-demo-gold/60 transition-all"
+            >
+              <Calendar size={15} />
+              יומן זמינות
+            </button>
+            <button
+              onClick={() => handleContinue('questionnaire')}
+              className="flex items-center gap-2 px-5 py-3 bg-gradient-to-l from-demo-gold to-yellow-500 text-black font-bold rounded-xl text-sm shadow-xl hover:opacity-90 transition-all"
+            >
+              תכנון תרגיל
+              <ChevronLeft size={18} />
+            </button>
           </div>
         </div>
       </div>
