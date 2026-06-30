@@ -66,7 +66,18 @@ function polygonCentroid(coordinates) {
   return [x / n, y / n]
 }
 
-export default function MapView({ layers, activePlanId = null }) {
+// כל בקרות התצוגה (3D / שכבות מידע / מקרא / מקורות) — גליון אחד, לא 4 אשכולות עצמאיים.
+// דפוס מוכר מאפליקציות מפה מובייל (Google Maps "Layers" וכו').
+const LAYER_OPTIONS = [
+  { key: 'forces',         label: 'כוחות'   },
+  { key: 'hazards',        label: 'מפגעים'  },
+  { key: 'infrastructure', label: 'תשתיות'  },
+  { key: 'neighbors',      label: 'שכנים'   },
+  { key: 'history',        label: 'היסטוריה' },
+  { key: 'natbam',         label: 'נת"ב'    },
+]
+
+export default function MapView({ layers, toggleLayer = () => {}, onShowDiagram = () => {}, activePlanId = null }) {
   const containerRef  = useRef(null)
   const mapObj        = useRef(null)
   const popupRef      = useRef(null)
@@ -74,6 +85,20 @@ export default function MapView({ layers, activePlanId = null }) {
   const [is3D, setIs3D]           = useState(false)
   const is3DRef                   = useRef(false)   // stale-closure-safe ref
   const [showCones, setShowCones] = useState(false)
+  // גליון אחד מאחד את כל בקרות התצוגה — סגור כברירת מחדל. אותם אירועי קול/טקסט
+  // (sadan:toggle_legend / sadan:toggle_layers_panel) ממשיכים לעבוד זהה — רק נקודת
+  // הכניסה הוויזואלית התאחדה.
+  const [optionsOpen, setOptionsOpen] = useState(false)
+
+  useEffect(() => {
+    const handle = () => setOptionsOpen(v => !v)
+    window.addEventListener('sadan:toggle_legend', handle)
+    window.addEventListener('sadan:toggle_layers_panel', handle)
+    return () => {
+      window.removeEventListener('sadan:toggle_legend', handle)
+      window.removeEventListener('sadan:toggle_layers_panel', handle)
+    }
+  }, [])
 
   useEffect(() => {
     if (!containerRef.current || mapObj.current) return
@@ -740,19 +765,9 @@ export default function MapView({ layers, activePlanId = null }) {
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 0 }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 
-      {/* כפתורי מפה — ימין */}
-      <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }} className="flex flex-col gap-2">
-        <button
-          onClick={toggle3D}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg
-            ${is3D
-              ? 'bg-demo-gold text-black'
-              : 'bg-demo-surface/90 text-demo-gold border border-demo-gold/40 backdrop-blur-sm'}`}
-        >
-          ⛰️ {is3D ? '2D' : '3D'}
-        </button>
-
-        {activePlanId && (
+      {/* כפתורי מפה — ימין: רק "משפכי ירי" (מותנה-תוכנית, נושא נפרד מבקרות תצוגה) */}
+      {activePlanId && (
+        <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}>
           <button
             onClick={toggleCones}
             title="הצג / הסתר משפכי ירי"
@@ -763,32 +778,83 @@ export default function MapView({ layers, activePlanId = null }) {
           >
             🔫 {showCones ? 'הסתר ירי' : 'משפכי ירי'}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Legend */}
-      <div
-        style={{ position: 'absolute', bottom: 36, right: 12, zIndex: 10 }}
-        className="bg-demo-surface/90 backdrop-blur-sm border border-demo-border rounded-xl px-3 py-2 text-xs space-y-1.5"
-        dir="rtl"
-      >
-        <div className="text-gray-500 font-semibold text-[10px] uppercase tracking-wide mb-1">מקרא</div>
-        <div className="flex items-center gap-2"><span className="w-5 h-0 border-t-2 border-dashed border-[#c6953b] inline-block"/><span className="text-[#c6953b] font-semibold">ציר התקדמות</span></div>
-        <div className="flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center border-2 border-[#3b82f6] rounded-full text-[#93c5fd] text-[9px] font-black inline-block">1</span><span className="text-gray-300">נקודת דיווח</span></div>
-        <div className="flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center border border-[#f97316] rounded-sm text-[10px] inline-block">🔫</span><span className="text-gray-300">ע.י. ברתק</span></div>
-        <div className="flex items-center gap-2"><span className="w-4 h-4 rounded-sm border border-[#ef4444] bg-[#ef4444]/20 inline-block"/><span className="text-gray-300">א. הסתערות</span></div>
-        <div className="flex items-center gap-2"><span className="w-5 h-0 border-t-2 border-dashed border-white inline-block"/><span className="text-gray-300">גבול גזרה</span></div>
-        <div className="flex items-center gap-2"><span className="w-5 h-0 border-t-2 border-dotted border-[#22c55e] inline-block"/><span className="text-gray-300">נתיר</span></div>
-        <div className="flex items-center gap-2"><span className="text-[#f59e0b] font-black text-base">⊕</span><span className="text-gray-300">מטרה</span></div>
-        <div className="flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center border border-[#ef4444] rounded-sm text-[#ef4444] text-[10px] font-black inline-block">✕</span><span className="text-gray-300">בימוי אויב</span></div>
-        <div className="flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center border border-[#3b82f6] rounded-sm text-[#3b82f6] text-[10px] font-black inline-block">★</span><span className="text-gray-300">חפ"ק / רפואה</span></div>
-        <div className="border-t border-gray-700 my-0.5"/>
-        <div className="flex items-center gap-2"><span className="text-sm">🏺🌿</span><span className="text-gray-300">מפגע</span><span className="w-2.5 h-2.5 rounded-full border-2 border-[#ef4444] inline-block ml-1"/><span className="text-[#ef4444]">גבוה</span></div>
-        <div className="flex items-center gap-2 pr-5"><span className="w-2.5 h-2.5 rounded-full border-2 border-[#f59e0b] inline-block"/><span className="text-[#f59e0b]">בינוני</span></div>
-        <div className="flex items-center gap-2"><span className="text-sm">🏕️💧🚁🏢</span><span className="text-gray-300">תשתית</span></div>
-        <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm border border-[#a855f7] bg-[#a855f7]/20 inline-block"/><span className="text-gray-300">כוח שכן</span></div>
-        <div className="flex items-center gap-2"><span className="text-sm">📋</span><span className="text-gray-300">היסטוריה</span></div>
-        <div className="flex items-center gap-2"><span className="w-5 h-0.5 bg-[#fbbf24] inline-block border-t-2 border-dashed border-[#fbbf24]"/><span className="text-gray-300">קו חשמל</span></div>
+      {/* ── תצוגת מפה — גליון יחיד מאחד 3D / שכבות מידע / מקרא / מקורות ──
+          במקום 4 אשכולות עצמאיים (ר' תוכנית עיצוב UX), נקודת כניסה אחת בשמאל-עליון. */}
+      <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 10, maxWidth: optionsOpen ? '260px' : 'auto' }}>
+        <button
+          onClick={() => setOptionsOpen(v => !v)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-md bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm hover:text-demo-gold hover:border-demo-gold/40"
+        >
+          ⚙️ תצוגת מפה {optionsOpen ? '▾' : '▸'}
+        </button>
+
+        {optionsOpen && (
+          <div dir="rtl" className="mt-1.5 bg-demo-surface/95 backdrop-blur-sm border border-demo-border rounded-xl px-3 py-3 text-xs space-y-3 max-h-[70vh] overflow-y-auto">
+
+            {/* 3D */}
+            <button
+              onClick={toggle3D}
+              className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all
+                ${is3D ? 'bg-demo-gold text-black' : 'bg-black/30 text-demo-gold border border-demo-gold/40'}`}
+            >
+              ⛰️ {is3D ? 'בטל תלת מימד' : 'הפעל תלת מימד'}
+            </button>
+
+            {/* שכבות מידע */}
+            <div>
+              <div className="text-gray-500 font-semibold text-[10px] uppercase tracking-wide mb-1.5">שכבות מידע</div>
+              <div className="flex flex-wrap gap-1.5">
+                {LAYER_OPTIONS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => toggleLayer(key)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all
+                      ${layers[key]
+                        ? `border-2 ${key === 'natbam' ? 'border-red-400 text-red-300' : 'border-demo-gold text-demo-gold'}`
+                        : 'border border-white/20 text-gray-400 bg-black/20'
+                      }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* מקרא */}
+            <div>
+              <div className="text-gray-500 font-semibold text-[10px] uppercase tracking-wide mb-1.5">מקרא</div>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2"><span className="w-5 h-0 border-t-2 border-dashed border-[#c6953b] inline-block"/><span className="text-[#c6953b] font-semibold">ציר התקדמות</span></div>
+                <div className="flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center border-2 border-[#3b82f6] rounded-full text-[#93c5fd] text-[9px] font-black inline-block">1</span><span className="text-gray-300">נקודת דיווח</span></div>
+                <div className="flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center border border-[#f97316] rounded-sm text-[10px] inline-block">🔫</span><span className="text-gray-300">ע.י. ברתק</span></div>
+                <div className="flex items-center gap-2"><span className="w-4 h-4 rounded-sm border border-[#ef4444] bg-[#ef4444]/20 inline-block"/><span className="text-gray-300">א. הסתערות</span></div>
+                <div className="flex items-center gap-2"><span className="w-5 h-0 border-t-2 border-dashed border-white inline-block"/><span className="text-gray-300">גבול גזרה</span></div>
+                <div className="flex items-center gap-2"><span className="w-5 h-0 border-t-2 border-dotted border-[#22c55e] inline-block"/><span className="text-gray-300">נתיר</span></div>
+                <div className="flex items-center gap-2"><span className="text-[#f59e0b] font-black text-base">⊕</span><span className="text-gray-300">מטרה</span></div>
+                <div className="flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center border border-[#ef4444] rounded-sm text-[#ef4444] text-[10px] font-black inline-block">✕</span><span className="text-gray-300">בימוי אויב</span></div>
+                <div className="flex items-center gap-2"><span className="w-4 h-4 flex items-center justify-center border border-[#3b82f6] rounded-sm text-[#3b82f6] text-[10px] font-black inline-block">★</span><span className="text-gray-300">חפ"ק / רפואה</span></div>
+                <div className="border-t border-gray-700 my-0.5"/>
+                <div className="flex items-center gap-2"><span className="text-sm">🏺🌿</span><span className="text-gray-300">מפגע</span><span className="w-2.5 h-2.5 rounded-full border-2 border-[#ef4444] inline-block ml-1"/><span className="text-[#ef4444]">גבוה</span></div>
+                <div className="flex items-center gap-2 pr-5"><span className="w-2.5 h-2.5 rounded-full border-2 border-[#f59e0b] inline-block"/><span className="text-[#f59e0b]">בינוני</span></div>
+                <div className="flex items-center gap-2"><span className="text-sm">🏕️💧🚁🏢</span><span className="text-gray-300">תשתית</span></div>
+                <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm border border-[#a855f7] bg-[#a855f7]/20 inline-block"/><span className="text-gray-300">כוח שכן</span></div>
+                <div className="flex items-center gap-2"><span className="text-sm">📋</span><span className="text-gray-300">היסטוריה</span></div>
+                <div className="flex items-center gap-2"><span className="w-5 h-0.5 bg-[#fbbf24] inline-block border-t-2 border-dashed border-[#fbbf24]"/><span className="text-gray-300">קו חשמל</span></div>
+              </div>
+            </div>
+
+            {/* מקורות */}
+            <button
+              onClick={onShowDiagram}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-black/30 text-gray-300 border border-demo-border hover:text-demo-gold hover:border-demo-gold/40 transition-all"
+            >
+              ℹ️ מקורות מידע
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Popup CSS */}

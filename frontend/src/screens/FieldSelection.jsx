@@ -43,10 +43,10 @@ export default function FieldSelection() {
   }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="flex flex-col h-screen bg-demo-bg" dir="rtl">
-      <Header currentPath="/area" />
+    <div className="flex flex-col h-dvh bg-demo-bg" dir="rtl">
+      <Header currentPath="/field-selection" />
 
-      <div className="flex-1 flex flex-col items-center justify-center px-6 gap-8">
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-6 gap-8 overflow-y-auto">
 
         {/* כותרת */}
         <div className="text-center space-y-2">
@@ -55,7 +55,7 @@ export default function FieldSelection() {
         </div>
 
         {/* כרטיסי בחירה — 2 אפשרויות */}
-        <div className="flex gap-6 w-full max-w-2xl justify-center">
+        <div className="flex flex-col sm:flex-row gap-6 w-full max-w-2xl justify-center">
           {OPTIONS.map((opt, i) => (
             <button
               key={opt.key}

@@ -17,9 +17,9 @@ const CHECKLIST_ITEMS = [
 
 const INITIAL_SERVERS = [
   { id: 'frontend', label: 'Frontend',        url: null,                 port: 5173 },
-  { id: 'backend',  label: 'Backend API',     url: 'http://localhost:8000/health', port: 8000 },
-  { id: 'whatsapp', label: 'WhatsApp Server', url: 'http://localhost:3001/status', port: 3001 },
-  { id: 'tts',      label: 'ElevenLabs TTS',  url: 'http://localhost:8000/api/voice/health', port: null },
+  { id: 'backend',  label: 'Backend API',     url: '/health', port: 8000 },
+  { id: 'whatsapp', label: 'WhatsApp Server', url: '/wa/status', port: 3001 },
+  { id: 'tts',      label: 'ElevenLabs TTS',  url: '/api/voice/health', port: null },
 ]
 
 const STATUS_COLORS = {
@@ -54,7 +54,7 @@ export default function DemoChecklist() {
 
   const fetchSpeakers = useCallback(async () => {
     try {
-      const r = await fetch('http://localhost:8000/api/speaker/list', { signal: AbortSignal.timeout(3000) })
+      const r = await fetch('/api/speaker/list', { signal: AbortSignal.timeout(3000) })
       if (r.ok) setSpkData(await r.json())
     } catch {}
   }, [])
@@ -63,7 +63,7 @@ export default function DemoChecklist() {
 
   async function toggleSpeakerVerify(enabled) {
     try {
-      await fetch('http://localhost:8000/api/speaker/toggle', {
+      await fetch('/api/speaker/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled }),
@@ -75,7 +75,7 @@ export default function DemoChecklist() {
 
   async function removeSpeaker(name) {
     try {
-      await fetch(`http://localhost:8000/api/speaker/${encodeURIComponent(name)}`, { method: 'DELETE' })
+      await fetch(`/api/speaker/${encodeURIComponent(name)}`, { method: 'DELETE' })
       fetchSpeakers()
       showSpkMsg(`🗑️ "${name}" הוסר`)
     } catch { showSpkMsg('❌ שגיאה בהסרה') }
@@ -84,7 +84,7 @@ export default function DemoChecklist() {
   async function resetAllSpeakers() {
     for (const name of spkData.speakers) {
       try {
-        await fetch(`http://localhost:8000/api/speaker/${encodeURIComponent(name)}`, { method: 'DELETE' })
+        await fetch(`/api/speaker/${encodeURIComponent(name)}`, { method: 'DELETE' })
       } catch {}
     }
     fetchSpeakers()
@@ -141,7 +141,7 @@ export default function DemoChecklist() {
       for (let i = 0; i < combined.length; i++) binary += String.fromCharCode(combined[i])
       const b64 = btoa(binary)
 
-      const r = await fetch('http://localhost:8000/api/speaker/enroll', {
+      const r = await fetch('/api/speaker/enroll', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: enrollName.trim(), audio_base64: b64 }),
@@ -184,7 +184,7 @@ export default function DemoChecklist() {
     // Check backend
     try {
       setServerStatus(prev => ({ ...prev, backend: 'checking' }))
-      const r = await fetch('http://localhost:8000/health', { signal: AbortSignal.timeout(3000) })
+      const r = await fetch('/health', { signal: AbortSignal.timeout(3000) })
       if (r.ok) {
         setServerStatus(prev => ({ ...prev, backend: 'ok' }))
         addLog('✅ Backend API — פועל')
@@ -199,7 +199,7 @@ export default function DemoChecklist() {
     // Check WhatsApp server
     try {
       setServerStatus(prev => ({ ...prev, whatsapp: 'checking' }))
-      const r = await fetch('http://localhost:3001/status', { signal: AbortSignal.timeout(3000) })
+      const r = await fetch('/wa/status', { signal: AbortSignal.timeout(3000) })
       if (r.ok) {
         const data = await r.json()
         const isReady = data?.ready === true
@@ -216,7 +216,7 @@ export default function DemoChecklist() {
     // Check TTS (ElevenLabs via voice/health)
     try {
       setServerStatus(prev => ({ ...prev, tts: 'checking' }))
-      const r = await fetch('http://localhost:8000/api/voice/health', { signal: AbortSignal.timeout(3000) })
+      const r = await fetch('/api/voice/health', { signal: AbortSignal.timeout(3000) })
       if (r.ok) {
         const data = await r.json()
         const ttsOk = data?.tts === 'ok'
@@ -257,7 +257,7 @@ export default function DemoChecklist() {
   const doneCount = CHECKLIST_ITEMS.filter(i => checked[i.id]).length
 
   return (
-    <div className="min-h-screen bg-demo-bg text-white p-6" dir="rtl">
+    <div className="min-h-dvh bg-demo-bg text-white p-6" dir="rtl">
       <div className="max-w-2xl mx-auto space-y-6">
 
         {/* Title */}

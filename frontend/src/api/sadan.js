@@ -1,7 +1,8 @@
 import axios from 'axios'
 
+// Relative baseURL — proxied by Vite (vite.config.js). Works on localhost and through the tunnel.
 const api = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: '',
 })
 
 export async function sendMessage(message, sessionId = null) {

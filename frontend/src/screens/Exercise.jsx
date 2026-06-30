@@ -687,28 +687,32 @@ export default function Exercise() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-demo-bg" dir="rtl">
+    <div className="flex flex-col h-dvh bg-demo-bg" dir="rtl">
       <Header currentPath="/exercise" />
       {showDiagram && <DataSourcesDiagram onClose={() => setShowDiagram(false)} />}
 
-      {/* Topbar */}
-      <div className="flex items-center justify-between px-6 py-2.5 border-b border-demo-border bg-demo-surface flex-shrink-0">
-        <BackButton to="/plans" />
-        <div className="text-center">
-          <h2 className="text-white font-bold text-sm">{EXERCISE_FILE.name}</h2>
-          <p className="text-gray-500 text-xs">
-            {EXERCISE_FILE.field} | {EXERCISE_FILE.date} | {EXERCISE_FILE.unit}
-            <span className="mx-2 text-gray-600">|</span>
-            <span className="text-demo-gold/80">דרגה מאשרת:</span>
-            <span className="text-gray-400 mr-1">{EXERCISE_FILE.approvalRank}</span>
-          </p>
+      {/* Topbar — stacks on mobile (title row, then actions row) instead of cramming 3 flex children into one row */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 px-3 md:px-6 py-2.5 border-b border-demo-border bg-demo-surface flex-shrink-0">
+        <div className="flex items-center justify-between md:contents">
+          <BackButton to="/plans" />
+          <div className="text-center flex-1 md:flex-initial min-w-0">
+            <h2 className="text-white font-bold text-sm truncate">{EXERCISE_FILE.name}</h2>
+            <p className="text-gray-500 text-xs hidden sm:block truncate">
+              {EXERCISE_FILE.field} | {EXERCISE_FILE.date} | {EXERCISE_FILE.unit}
+              <span className="mx-2 text-gray-600">|</span>
+              <span className="text-demo-gold/80">דרגה מאשרת:</span>
+              <span className="text-gray-400 mr-1">{EXERCISE_FILE.approvalRank}</span>
+            </p>
+          </div>
+          {/* spacer to balance BackButton width on mobile so title stays centered */}
+          <div className="w-8 md:hidden" />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 justify-center md:justify-end">
           <button
             onClick={() => setShowDiagram(true)}
             className="flex items-center gap-1 px-3 py-1.5 bg-demo-card border border-demo-border rounded-lg text-gray-400 hover:text-demo-gold hover:border-demo-gold/40 text-xs transition-colors"
           >
-            <Info size={13} /> מקורות
+            <Info size={13} /> <span className="hidden sm:inline">מקורות</span>
           </button>
           <ExportDropdown />
           <button
@@ -718,7 +722,7 @@ export default function Exercise() {
             <Play size={13} /> סימולציה
           </button>
           <button className="flex items-center gap-1 px-3 py-1.5 bg-demo-card border border-demo-border rounded-lg text-gray-400 hover:text-white text-xs transition-colors">
-            <Pencil size={13} /> עריכה
+            <Pencil size={13} /> <span className="hidden sm:inline">עריכה</span>
           </button>
         </div>
       </div>
@@ -740,11 +744,14 @@ export default function Exercise() {
         </div>
       )}
 
-      <div className="flex flex-1 overflow-hidden min-h-0">
-        {/* Sidebar */}
-        <div className="w-48 bg-demo-surface border-r border-demo-border flex flex-col flex-shrink-0 overflow-hidden">
+      {/* תיק תרגיל — Header/Body קבוע: רצועת הטאבים תמיד למעלה, התוכן ממלא את כל הגובה
+          הפנוי עם הגלילה שלו (לא נגלל ביחד עם הטאבים — בניגוד לשאלון/בוחן, כאן רוצים
+          שהתוכן "יתפוס" את המסך, לא שיהיה עוד בלוק שגוללים אליו). */}
+      <div className="flex flex-col md:flex-row flex-1 overflow-hidden min-h-0">
+        {/* Sidebar — horizontal scrolling tab strip on mobile, vertical sidebar on desktop */}
+        <div className="w-full md:w-48 bg-demo-surface border-b md:border-b-0 md:border-r border-demo-border flex flex-col flex-shrink-0 md:overflow-hidden">
           {/* טאבים */}
-          <div className="flex-1 overflow-y-auto py-2">
+          <div className="flex flex-row md:flex-col overflow-x-auto md:overflow-x-visible md:flex-1 md:overflow-y-auto py-2">
             {allSections.map(section => {
               const Icon     = ICON_MAP[section.icon] || FileText
               const style    = STATUS_STYLE[section.status] || STATUS_STYLE.ok
@@ -755,14 +762,22 @@ export default function Exercise() {
                   key={section.id}
                   onClick={() => handleTabClick(section.id)}
                   className={`
-                    w-full flex items-center gap-3 px-3 py-3 text-right transition-all relative
-                    ${isActive ? 'bg-demo-gold/10 border-l-2 border-demo-gold' : 'hover:bg-demo-card'}
+                    flex-shrink-0 md:w-full flex items-center gap-3 px-3 py-3 text-right transition-all relative
+                    ${isActive ? 'bg-demo-gold/10 border-b-2 md:border-b-0 md:border-l-2 border-demo-gold' : 'hover:bg-demo-card'}
                   `}
                 >
                   <Icon size={18} className={isActive ? 'text-demo-gold' : 'text-gray-500'} />
                   <div className="flex-1 min-w-0">
-                    <div className={`text-sm font-semibold truncate ${isActive ? 'text-white' : 'text-gray-400'}`}>
-                      {section.label}
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-sm font-semibold truncate ${isActive ? 'text-white' : 'text-gray-400'}`}>
+                        {section.label}
+                      </span>
+                      {/* חובה לבקר לפני המשך לבוחן — נקודה כתומה עד ביקור, ✓ ירוק אחריו */}
+                      {(section.id === 'fire' || section.id === 'natbam') && (
+                        visited.has(section.id)
+                          ? <span className="text-green-400 text-xs flex-shrink-0">✓</span>
+                          : <span className="w-2 h-2 rounded-full bg-orange-400 flex-shrink-0" title="ביקור נדרש להמשך" />
+                      )}
                     </div>
                     {section.statusLabel && (
                       <div className={`text-[11px] ${style.badge}`}>{section.statusLabel}</div>

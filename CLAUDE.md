@@ -440,6 +440,9 @@ powershell -ExecutionPolicy Bypass -File test-system.ps1
 ### דילוג בין שלבי הדמו (לעת הצורך מול קהל)
 `Ctrl+Shift+→` בכל מסך פותח פאנל נסתר (`DemoControlPanel`) לקפיצה ישירה בין מסכים, מילוי שאלון אוטומטי, ובחירת מתווה — דרך אותם אירועים (`sadan:navigate`/`sadan:action`/`fillField`) שהקול כבר משתמש בהם. לא כולל אישור-הכל באישורים — זה נשאר ידני בכוונה (ה"מומנט" המרכזי של הדמו).
 
+### דמו בטלפון נייד
+`start.ps1` מקים tunnel נוסף ונפרד לפרונטאנד (לא ל-backend — זה נשאר ייעודי לשיחות Vonage) ומציג בסיכום "📱 קישור לטלפון". פתח אותו בטלפון — המיקרופון יעבוד כי זו כתובת HTTPS אמיתית. כל הבקשות (API, קול, וואטסאפ) עוברות דרך אותו origin בלבד (proxy ב-`frontend/vite.config.js`) — backend ושרת הוואטסאפ לא נחשפים ישירות לאינטרנט.
+
 ### קובץ עזר משותף
 `scripts/sadan-checks.ps1` — פונקציות בדיקה (Backend/Frontend/WhatsApp/Tunnel/Vonage) בשימוש משותף של שני הסקריפטים למעלה.
 

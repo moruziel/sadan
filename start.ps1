@@ -57,8 +57,8 @@ if (-not $waCheck.ok -and $waCheck.detail -like "*לא מגיב*") {
     }
 }
 
-# ── 2. Cloudflare tunnel ─────────────────────────────────────
-Write-Step "2. Cloudflare tunnel"
+# ── 2. Cloudflare tunnel — Backend (Vonage PSTN bridge only) ──
+Write-Step "2. Cloudflare tunnel — Backend (לשיחות טלפון)"
 
 if (Test-Path $CFOUT) { Remove-Item $CFOUT -Force -ErrorAction SilentlyContinue }
 if (Test-Path $CFERR) { Remove-Item $CFERR -Force -ErrorAction SilentlyContinue }
@@ -110,13 +110,45 @@ if (-not (Port-InUse 5173)) {
     Write-OK "הופעל בחלון חדש"
 }
 
-# ── 5. Open browser ──────────────────────────────────────────
-Write-Step "5. פותח דפדפן..."
+# ── 5. Cloudflare tunnel — Frontend (לטלפון נייד) ─────────────
+# tunnel נפרד מזה של ה-backend — הטלפון מדבר רק עם ה-frontend,
+# שמעביר פנימה (proxy ב-vite.config.js) ל-backend ולשרת הוואטסאפ.
+Write-Step "5. Cloudflare tunnel — Frontend (לטלפון נייד)"
+
+$CFOUT2 = "$env:TEMP\sadan_cf_frontend_out.log"
+$CFERR2 = "$env:TEMP\sadan_cf_frontend_err.log"
+if (Test-Path $CFOUT2) { Remove-Item $CFOUT2 -Force -ErrorAction SilentlyContinue }
+if (Test-Path $CFERR2) { Remove-Item $CFERR2 -Force -ErrorAction SilentlyContinue }
+
+Start-Process $CLOUDFLARED -ArgumentList @("tunnel", "--url", "http://localhost:5173", "--protocol", "http2") -RedirectStandardOutput $CFOUT2 -RedirectStandardError $CFERR2 -WindowStyle Hidden
+
+$frontendTunnelUrl = $null
+Write-Host "  ממתין לכתובת" -NoNewline
+for ($i = 0; $i -lt 30; $i++) {
+    Start-Sleep 1
+    Write-Host "." -NoNewline
+    $txt = ""
+    if (Test-Path $CFOUT2) { $txt += (Get-Content $CFOUT2 -Raw -ErrorAction SilentlyContinue) }
+    if (Test-Path $CFERR2) { $txt += (Get-Content $CFERR2 -Raw -ErrorAction SilentlyContinue) }
+    if ($txt -match 'https://([a-z0-9\-]+\.trycloudflare\.com)') {
+        $frontendTunnelUrl = $matches[1]
+        break
+    }
+}
+Write-Host ""
+if ($frontendTunnelUrl) {
+    Write-OK "https://$frontendTunnelUrl"
+} else {
+    Write-Warn "לא התקבלה כתובת tunnel לפרונטאנד - דמו בטלפון לא יהיה זמין"
+}
+
+# ── 6. Open browser ──────────────────────────────────────────
+Write-Step "6. פותח דפדפן..."
 Start-Sleep 4
 Start-Process "http://localhost:5173"
 
-# ── 6. Real health checks (with retry, not just "port open") ─
-Write-Step "6. בדיקות בריאות (ממתין לשירותים...)"
+# ── 7. Real health checks (with retry, not just "port open") ─
+Write-Step "7. בדיקות בריאות (ממתין לשירותים...)"
 
 function Wait-Check {
     param($Name, $CheckBlock, $MaxTries = 8, $DelaySec = 3)
@@ -131,6 +163,7 @@ function Wait-Check {
 $backendResult  = Wait-Check -Name "Backend"  -CheckBlock { Test-Backend }
 $frontendResult = Wait-Check -Name "Frontend" -CheckBlock { Test-Frontend }
 $tunnelResult   = Wait-Check -Name "Tunnel"   -CheckBlock { Test-Tunnel -NgrokHost $tunnelUrl } -MaxTries 5
+$mobileTunnelResult = Wait-Check -Name "MobileTunnel" -CheckBlock { Test-Tunnel -NgrokHost $frontendTunnelUrl } -MaxTries 5
 $waResult       = Wait-Check -Name "WhatsApp" -CheckBlock { Test-WhatsAppReady } -MaxTries 10 -DelaySec 5
 $vonageResult   = Test-VonageConfig -EnvPath $ENVPATH
 
@@ -141,11 +174,12 @@ Write-Host "  סיכום מצב המערכת" -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Cyan
 
 $checks = @(
-    @{ name = "Backend";  result = $backendResult }
-    @{ name = "Frontend"; result = $frontendResult }
-    @{ name = "Tunnel";   result = $tunnelResult }
-    @{ name = "WhatsApp"; result = $waResult }
-    @{ name = "Vonage";   result = $vonageResult }
+    @{ name = "Backend";       result = $backendResult }
+    @{ name = "Frontend";      result = $frontendResult }
+    @{ name = "Tunnel (שיחות)"; result = $tunnelResult }
+    @{ name = "Tunnel (נייד)";  result = $mobileTunnelResult }
+    @{ name = "WhatsApp";      result = $waResult }
+    @{ name = "Vonage";        result = $vonageResult }
 )
 
 $allOk = $true
@@ -171,5 +205,6 @@ Write-Host ""
 Write-Host "  Frontend : http://localhost:5173"
 Write-Host "  Backend  : http://localhost:8000/docs"
 Write-Host "  WhatsApp : http://localhost:3001/qr"
-if ($tunnelUrl) { Write-Host "  Tunnel   : https://$tunnelUrl" }
+if ($tunnelUrl)         { Write-Host "  Tunnel (שיחות) : https://$tunnelUrl" }
+if ($frontendTunnelUrl) { Write-Host "  📱 קישור לטלפון : https://$frontendTunnelUrl" -ForegroundColor Green }
 Write-Host "======================================================" -ForegroundColor Cyan

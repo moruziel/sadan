@@ -218,7 +218,7 @@ export default function Login() {
   if (mode === 'success') {
     return (
       <div dir="rtl" style={{
-        minHeight: '100vh', background: '#0c1117',
+        minHeight: '100dvh', background: '#0c1117',
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         gap: 32, position: 'relative',
       }}>
@@ -272,7 +272,7 @@ export default function Login() {
   // ── manual mode ──
   if (mode === 'manual') {
     return (
-      <div dir="rtl" style={{ minHeight: '100vh', background: '#0c1117', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+      <div dir="rtl" style={{ minHeight: '100dvh', background: '#0c1117', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
         <ManualLoginForm onBack={() => setMode('voice')} />
         <p className="text-gray-700 text-xs mt-6">מערכת מאובטחת — לשימוש מורשים בלבד</p>
       </div>
@@ -282,7 +282,7 @@ export default function Login() {
   // ── voice / connecting / listening ──
   return (
     <div dir="rtl" style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
       background: '#0c1117',
       display: 'flex',
       flexDirection: 'column',
@@ -459,7 +459,7 @@ export default function Login() {
 
         {/* ── Code input — visible in voice + listening modes ── */}
         {(mode === 'voice' || mode === 'listening') && (
-          <div style={{ width: 260, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ width: 'min(260px, 90vw)', display: 'flex', flexDirection: 'column', gap: 8 }}>
 
             {/* error / locked feedback */}
             {loginError === 'wrong' && (

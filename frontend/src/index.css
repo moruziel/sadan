@@ -21,7 +21,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100vh;
+  height: 100dvh; /* 100vh is wrong on mobile — doesn't account for the address bar */
   font-size: 1.5rem;
   font-weight: 600;
   color: #c6953b;
@@ -30,7 +30,7 @@ body {
 }
 
 #root {
-  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -44,6 +44,15 @@ body {
 }
 body.sadan-chat-open .sadan-main-content {
   transform: translateX(350px) scaleX(var(--sadan-scale));
+}
+
+/* On mobile the chat panel is a full-width overlay (see SadanChat.jsx w-full md:w-[350px]) —
+   it already covers everything, so squishing the content behind it would just be wrong math
+   (and --sadan-scale's 350px-based formula goes negative under ~350px viewports anyway). */
+@media (max-width: 768px) {
+  body.sadan-chat-open .sadan-main-content {
+    transform: none;
+  }
 }
 
 .sadan-panel {

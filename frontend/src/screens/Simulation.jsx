@@ -244,30 +244,64 @@ function createUnitEl(unit) {
   return { wrap, inner, el, arrow, ring, roleEl, statusBar }
 }
 
-// ── HUD Panel ─────────────────────────────────────────────────────────────────
-function HUDPanel({ phase, visible, onToggle }) {
-  if (!visible) return null
+// ── Info Panel — שלב + מצב כוח מאוחדים בכרטיס יחיד (במקום שני אשכולות נפרדים
+// שהתנגשו עם הפופ-אפ של יחידה בלחיצה). עקביות עם "תצוגת מפה" במסך השטח —
+// כניסה אחת, גליון אחד, לא כמה כרטיסים עצמאיים שמכסים את המפה. ─────────────────
+function InfoPanel({ phase, visible, onToggle }) {
+  const data = SIM_PHASES[phase]
+  const tact = PHASE_TACTICAL[phase]
   const statuses = UNIT_STATUS[phase] ?? {}
+
+  if (!visible) {
+    return (
+      <button
+        onClick={onToggle}
+        className="absolute top-4 left-4 z-30 bg-demo-surface/90 border border-demo-border rounded-xl px-3 py-2 text-xs text-demo-gold/80 backdrop-blur"
+      >
+        ℹ️ מידע
+      </button>
+    )
+  }
+
   return (
-    <div className="absolute top-4 right-4 z-30 bg-demo-surface/95 border border-demo-border rounded-xl p-3 w-60 backdrop-blur" dir="rtl">
-      <div className="flex items-center justify-between mb-2.5">
+    <div className="absolute top-4 left-4 z-30 bg-demo-surface/95 border border-demo-border rounded-xl p-3 w-64 max-h-[75vh] overflow-y-auto backdrop-blur" dir="rtl">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
-          <Radio size={12} className="text-demo-gold" />
-          <span className="text-demo-gold font-bold text-xs">מצב כוח — {SIM_PHASES[phase].time}</span>
+          <span className="text-lg leading-none">{tact?.icon ?? '⚡'}</span>
+          <div>
+            <div className="text-demo-gold font-bold text-xs">{data.longLabel}</div>
+            <div className="text-gray-500 text-[10px]">{data.time}</div>
+          </div>
         </div>
         <button onClick={onToggle} className="text-gray-500 hover:text-white text-base leading-none">×</button>
+      </div>
+
+      {tact?.details && (
+        <div className="border-t border-gray-700 pt-2 mt-2 mb-3 space-y-1.5">
+          {tact.details.map((d, i) => (
+            <div key={i} className="flex items-start gap-1.5">
+              <span className="text-demo-gold flex-shrink-0">·</span>
+              <span className="text-gray-200 text-[11px] leading-relaxed font-medium">{d}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="border-t border-gray-700 pt-2 flex items-center gap-1.5 mb-2">
+        <Radio size={11} className="text-demo-gold" />
+        <span className="text-demo-gold font-bold text-[11px]">מצב כוח</span>
       </div>
       <div className="space-y-2">
         {Object.entries(SIM_UNITS).map(([id, unit]) => (
           <div key={id} className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded flex items-center justify-center text-sm font-black flex-shrink-0"
+            <div className="w-7 h-7 rounded flex items-center justify-center text-xs font-black flex-shrink-0"
               style={{ border:`2px solid ${unit.color}`, color:unit.color, background:`${unit.color}20` }}>
               {unit.icon}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
-                <span className="text-white text-xs font-bold">{unit.callsign}</span>
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                <span className="text-white text-[11px] font-bold">{unit.callsign}</span>
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
                   (statuses[id]??'').includes('הסתערות') ? 'bg-red-500/20 text-red-300' :
                   (statuses[id]??'').includes('ירי')     ? 'bg-blue-500/20 text-blue-300' :
                   (statuses[id]??'').includes('תנועה')   ? 'bg-yellow-500/20 text-yellow-300' :
@@ -278,44 +312,6 @@ function HUDPanel({ phase, visible, onToggle }) {
             </div>
           </div>
         ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Phase title card — top-left, slides in from left ─────────────────────────
-function PhaseTitleCard({ phase }) {
-  const data = SIM_PHASES[phase]
-  const tact = PHASE_TACTICAL[phase]
-  return (
-    <div className="absolute top-4 left-4 z-40 pointer-events-none" dir="rtl">
-      {/* רקע שחור מלא — ללא backdrop-filter כדי שהמפה הבהירה לא תדלוף פנימה */}
-      <div style={{
-        background: '#000000f2',
-        border: '2px solid #c6953b',
-        borderRadius: '16px',
-        boxShadow: '0 0 0 1px #000, 0 8px 32px rgba(0,0,0,0.95), 0 0 20px rgba(198,149,59,0.25)',
-        animation: 'phaseCardIn 7s ease-in-out forwards',
-        width: '270px',
-        padding: '16px 20px',
-      }}>
-        <div className="flex items-center gap-3 mb-2">
-          <span className="text-3xl leading-none flex-shrink-0">{tact?.icon ?? '⚡'}</span>
-          <div>
-            <div style={{ color:'#c6953b', fontWeight:900, fontSize:'15px', lineHeight:1.3, textShadow:'0 1px 6px #000' }}>{data.longLabel}</div>
-            <div style={{ color:'#9ca3af', fontSize:'11px', marginTop:'2px', fontWeight:700 }}>{data.time}</div>
-          </div>
-        </div>
-        {tact?.details && (
-          <div style={{ borderTop:'1px solid #374151', paddingTop:'10px', marginTop:'10px', display:'flex', flexDirection:'column', gap:'6px' }}>
-            {tact.details.map((d, i) => (
-              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:'8px' }}>
-                <span style={{ color:'#c6953b', flexShrink:0, marginTop:'1px', fontWeight:900 }}>·</span>
-                <span style={{ color:'#f3f4f6', fontSize:'12px', lineHeight:1.5, fontWeight:600, textShadow:'0 1px 4px #000' }}>{d}</span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   )
@@ -362,8 +358,6 @@ export default function Simulation() {
   const [unitInfo,        setUnitInfo]        = useState(null)
   const [hudVisible,      setHudVisible]      = useState(true)
   const [ttsEnabled,      setTtsEnabled]      = useState(false)
-  const [showCard,        setShowCard]        = useState(false)
-  const [cardPhase,       setCardPhase]       = useState(0)
   const [is3d,            setIs3d]            = useState(true)
   const [markerScale,     setMarkerScale]     = useState(1.0)   // 0.4 – 1.6
   const [showNextRoute,   setShowNextRoute]   = useState(false) // highlight next-phase movement lines
@@ -852,13 +846,6 @@ export default function Simulation() {
     return()=>{ try{window.speechSynthesis.cancel()}catch(_){} }
   },[phase,ttsEnabled])
 
-  // ── phase title card ──────────────────────────────────────────────────────
-  useEffect(()=>{
-    setCardPhase(phase); setShowCard(true)
-    const t=setTimeout(()=>setShowCard(false),7000)
-    return()=>clearTimeout(t)
-  },[phase])
-
   // ── SADAN show_unit — zoom in briefly, then return to fitBounds ─────────
   useEffect(()=>{
     const onShowUnit=e=>{
@@ -994,7 +981,7 @@ export default function Simulation() {
   const progress=(phase/(total-1))*100
 
   return (
-    <div className="flex flex-col h-screen bg-demo-bg" dir="rtl">
+    <div className="flex flex-col h-dvh bg-demo-bg" dir="rtl">
       {/* top bar */}
       <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2.5 bg-demo-surface border-b border-demo-border z-10">
         <button onClick={()=>navigate('/exercise')} className="flex items-center gap-1.5 text-gray-400 hover:text-white text-sm transition-colors">
@@ -1036,17 +1023,12 @@ export default function Simulation() {
       <div className="flex-1 relative min-h-0" dir="ltr">
         <div ref={mapElRef} className="w-full h-full" style={{direction:'ltr'}}/>
 
-        {showCard && <PhaseTitleCard phase={cardPhase}/>}
-        <HUDPanel phase={phase} visible={hudVisible} onToggle={()=>setHudVisible(false)}/>
-        {!hudVisible && (
-          <button onClick={()=>setHudVisible(true)}
-            className="absolute top-4 right-4 z-30 bg-demo-surface/90 border border-demo-border rounded-xl px-3 py-2 text-xs text-demo-gold/80 backdrop-blur">
-            📡 מצב כוח
-          </button>
-        )}
+        {/* מידע — שלב + מצב כוח מאוחדים, פינה אחת בלבד (שמאל-עליון) */}
+        <InfoPanel phase={phase} visible={hudVisible} onToggle={()=>setHudVisible(v=>!v)}/>
 
+        {/* פרטי יחידה בלחיצה — ימין-תחתון (פינה חופשית, לא מתנגש עם המידע) */}
         {unitInfo && (
-          <div className="absolute top-4 left-4 z-30 bg-demo-surface/95 border border-demo-border rounded-xl p-3 w-56 backdrop-blur" dir="rtl">
+          <div className="absolute bottom-4 right-4 z-30 bg-demo-surface/95 border border-demo-border rounded-xl p-3 w-56 backdrop-blur" dir="rtl">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded flex items-center justify-center text-sm font-black"
@@ -1065,10 +1047,6 @@ export default function Simulation() {
             </div>
           </div>
         )}
-
-        <div className="absolute bottom-4 left-4 z-20 bg-black/60 border border-demo-gold/30 rounded-xl px-3 py-2 text-xs text-demo-gold/80 backdrop-blur max-w-xs" dir="rtl">
-          💬 <span className="font-semibold">סדן</span> — "הקטן סימונים", "הבלט מסלול", "הבלט אויב", "מחסנית בטיחות"
-        </div>
       </div>
 
       {/* narration */}

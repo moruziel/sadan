@@ -1,5 +1,7 @@
-const WA_BASE  = 'http://localhost:3001'
-const API_BASE = 'http://localhost:8000/api'
+// Relative paths — proxied by Vite (vite.config.js) to the real services.
+// Works identically on localhost (desktop dev) and through the tunnel (phone).
+const WA_BASE  = '/wa'
+const API_BASE = '/api'
 
 // URL לתמונת שטח 309ה — OpenStreetMap static map
 // lat=31.830, lng=35.228, zoom=13 — מראה את כל אזור הפעילות

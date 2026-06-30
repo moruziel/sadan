@@ -249,6 +249,28 @@ class GeminiLivePipeline:
             ]
         )
 
+        # toggle_legend tool
+        toggle_legend_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="toggle_legend",
+                    description="הצג/הסתר את מקרא הסימונים על המפה. הפעל כשמבקשים 'תראה את המקרא' / 'הסתר מקרא' / 'מה הסימונים על המפה'.",
+                    parameters=types.Schema(type=types.Type.OBJECT, properties={}),
+                )
+            ]
+        )
+
+        # toggle_layers_panel tool — open/close the layer-buttons panel itself (not a specific layer)
+        toggle_layers_panel_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="toggle_layers_panel",
+                    description="הצג/הסתר את פאנל כפתורי שכבות המידע על המפה (לא שכבה ספציפית — את כל הפאנל). הפעל כשמבקשים 'תראה את אפשרויות השכבות' / 'הסתר את התפריט'.",
+                    parameters=types.Schema(type=types.Type.OBJECT, properties={}),
+                )
+            ]
+        )
+
         # map_fly_to — fly to coordinates
         map_fly_to_tool = types.Tool(
             function_declarations=[
@@ -317,12 +339,13 @@ class GeminiLivePipeline:
                     name="map_show_layer",
                     description=(
                         "הצג או הסתר שכבת מידע במפה. "
-                        "שכבות: forces=כוחות, hazards=מפגעים, infrastructure=תשתיות, neighbors=שכנים, history=היסטוריה."
+                        "שכבות: forces=כוחות, hazards=מפגעים, infrastructure=תשתיות, neighbors=שכנים, history=היסטוריה, natbam=נת\"ב. "
+                        "כדי להציג/להסתיר את כל השכבות בבת אחת — השתמש ב-layer='all'."
                     ),
                     parameters=types.Schema(
                         type=types.Type.OBJECT,
                         properties={
-                            "layer":   types.Schema(type=types.Type.STRING,  description="שם השכבה: forces/hazards/infrastructure/neighbors/history"),
+                            "layer":   types.Schema(type=types.Type.STRING,  description="שם השכבה: forces/hazards/infrastructure/neighbors/history/natbam, או 'all' לכולן"),
                             "visible": types.Schema(type=types.Type.BOOLEAN, description="true=הצג, false=הסתר"),
                         },
                         required=["layer", "visible"],
@@ -477,7 +500,9 @@ class GeminiLivePipeline:
                         "  forceSize = גודל כוח (מספר). "
                         "  composition = הרכב ('חי\"ר'/'שריון'/'מהנדסים' וכו׳). "
                         "3) נוהל קרב: section = missionReceived/situationAssessment/plan/order/preparations. "
-                        "  field_id: mission_source/enemy/plan_concept/phase1/prep_h24 וכו׳."
+                        "  field_id: mission_source/enemy/plan_concept/phase1/prep_h24 וכו׳. "
+                        "4) מסך אישורים (section=''): כשהמשתמש אומר 'תתקשר אלי במספר X' / 'שלח לי וואטסאפ למספר X' — "
+                        "  fill_field(field_id='target_phone', value=<המספר, פורמט בינלאומי בלי + לדוגמה 972501234567>)."
                     ),
                     parameters=types.Schema(
                         type=types.Type.OBJECT,
@@ -533,7 +558,7 @@ class GeminiLivePipeline:
                 language_codes=["he-IL"],  # BCP-47 — force Hebrew input recognition
             ),
             tools=[
-                send_wa_tool, toggle_3d_tool,
+                send_wa_tool, toggle_3d_tool, toggle_legend_tool, toggle_layers_panel_tool,
                 map_fly_to_tool, map_zoom_tool, map_rotate_tool, map_show_layer_tool,
                 app_navigate_tool, map_show_element_tool, fill_field_tool,
                 sim_pause_tool, sim_resume_tool, sim_goto_phase_tool, sim_show_unit_tool,
@@ -605,7 +630,7 @@ class GeminiLivePipeline:
             output_audio_transcription=types.AudioTranscriptionConfig(language_codes=["he-IL"]),
             input_audio_transcription=types.AudioTranscriptionConfig(language_codes=["he-IL"]),
             tools=[
-                send_wa_tool, toggle_3d_tool,
+                send_wa_tool, toggle_3d_tool, toggle_legend_tool, toggle_layers_panel_tool,
                 map_fly_to_tool, map_zoom_tool, map_rotate_tool, map_show_layer_tool,
                 app_navigate_tool, map_show_element_tool, fill_field_tool,
                 sim_pause_tool, sim_resume_tool, sim_goto_phase_tool, sim_show_unit_tool,
@@ -794,6 +819,22 @@ class GeminiLivePipeline:
                                 )
                                 await session.send_tool_response(function_responses=[
                                     types.FunctionResponse(name="toggle_3d", id=fc.id, response={"result": "ok"})
+                                ])
+
+                            elif fc.name == "toggle_legend":
+                                await self.websocket.send_text(
+                                    json.dumps({"type": "toggle_legend"}, ensure_ascii=False)
+                                )
+                                await session.send_tool_response(function_responses=[
+                                    types.FunctionResponse(name="toggle_legend", id=fc.id, response={"result": "ok"})
+                                ])
+
+                            elif fc.name == "toggle_layers_panel":
+                                await self.websocket.send_text(
+                                    json.dumps({"type": "toggle_layers_panel"}, ensure_ascii=False)
+                                )
+                                await session.send_tool_response(function_responses=[
+                                    types.FunctionResponse(name="toggle_layers_panel", id=fc.id, response={"result": "ok"})
                                 ])
 
                             elif fc.name == "map_fly_to":

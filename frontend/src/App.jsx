@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 import SadanChat from './components/common/SadanChat'
 import VoiceStatusOrb from './components/common/VoiceStatusOrb'
 import DemoControlPanel from './components/common/DemoControlPanel'
+import useKeepAwake from './hooks/useKeepAwake'
 
 import Login          from './screens/Login'
 import FieldSelection  from './screens/FieldSelection'
@@ -17,6 +18,9 @@ import DemoChecklist  from './screens/DemoChecklist'
 import Simulation     from './screens/Simulation'
 
 export default function App() {
+  // המסך לא יחשיך/יינעל כל עוד האפליקציה פתוחה — לא רק תוך כדי שיחה קולית.
+  useKeepAwake()
+
   return (
     <BrowserRouter>
       {/* sadan-main-content נדחף ימינה כשהצ'אט נפתח */}

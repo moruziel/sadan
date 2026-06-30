@@ -131,7 +131,7 @@ export default function AreaCalendar() {
     : null
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50" dir="rtl">
+    <div className="flex flex-col h-dvh bg-gray-50" dir="rtl">
       <Header currentPath="/area" />
 
       <div className="flex flex-1 overflow-hidden gap-0">

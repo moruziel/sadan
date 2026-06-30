@@ -160,12 +160,12 @@ export default function CombatProcedure() {
         </div>
       </div>
 
-      {/* ── two-column body ── */}
-      <div className="flex flex-1 min-h-0">
+      {/* ── two-column body — stacks on mobile (56% of 375px leaves ~165px for text,
+          too narrow to read labels/values without wrapping mid-word) ── */}
+      <div className="flex flex-col md:flex-row flex-1 min-h-0">
 
-        {/* left — tactical map (fixed, no scroll) */}
-        <div className="flex-shrink-0 border-l border-green-900/50 bg-[#090f09] flex items-center justify-center p-2"
-          style={{ width: '56%' }}>
+        {/* tactical map — full width on mobile (stacked above), fixed 56% column on desktop */}
+        <div className="w-full md:w-[56%] h-36 md:h-auto flex-shrink-0 border-b md:border-b-0 md:border-l border-green-900/50 bg-[#090f09] flex items-center justify-center p-2">
           <TacticalMap focusSection={focusSection} />
         </div>
 

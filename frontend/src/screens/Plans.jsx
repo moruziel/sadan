@@ -164,7 +164,7 @@ export default function Plans() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-demo-bg" dir="rtl">
+    <div className="flex flex-col h-dvh bg-demo-bg" dir="rtl">
       <Header currentPath="/plans" />
       {showDiagram && <DataSourcesDiagram onClose={() => setShowDiagram(false)} />}
 
@@ -231,8 +231,8 @@ export default function Plans() {
           </div>
         ) : (
           /* מצב "בחר מתווה" — 3 כרטיסים */
-          <div className="flex-1 min-h-0 px-5 py-4">
-            <div className="grid grid-cols-3 gap-4 h-full">
+          <div className="flex-1 min-h-0 overflow-y-auto md:overflow-visible px-5 py-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:h-full">
               {PLANS.map((plan, planIdx) => {
                 const isSelected = selected === plan.id
                 const story = STORIES[plan.id] || plan.story

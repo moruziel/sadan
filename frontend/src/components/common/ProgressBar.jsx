@@ -1,8 +1,10 @@
 import { useNavigate } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
 
 const STEPS = [
-  { path: '/area',          label: 'שטח',        icon: '🗺️' },
-  { path: '/questionnaire', label: 'שאלון',       icon: '📋' },
+  { path: '/field-selection', label: 'בחירת שטח',  icon: '📍' },
+  { path: '/area',          label: 'מפת שטח',     icon: '🗺️' },
+  { path: '/questionnaire', label: 'תכנון תרגיל', icon: '📋' },
   { path: '/plans',         label: 'מתווים',      icon: '🎯' },
   { path: '/exercise',      label: 'תיק תרגיל',   icon: '📁' },
   { path: '/quiz',          label: 'בוחן',        icon: '✏️' },
@@ -13,28 +15,37 @@ const STEPS = [
 export default function ProgressBar({ currentPath }) {
   const navigate    = useNavigate()
   const currentIdx  = STEPS.findIndex(s => s.path === currentPath)
+  const activeRef    = useRef(null)
+
+  // On narrow screens the bar overflows — auto-scroll the active step into view
+  // instead of leaving it clipped off-screen (RTL row-reverse pushes step 1 off
+  // the visual start with no way to know it's there).
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+  }, [currentPath])
 
   return (
-    <div className="flex flex-row-reverse items-center justify-center gap-0 px-4 py-2 bg-demo-surface border-b border-demo-border">
+    <div className="flex flex-row-reverse items-center justify-start md:justify-center gap-0 px-4 py-2 bg-demo-surface border-b border-demo-border overflow-x-auto">
       {STEPS.map((step, idx) => {
         const done   = idx < currentIdx
         const active = idx === currentIdx
         const future = idx > currentIdx
 
         return (
-          <div key={step.path} className="flex items-center">
+          <div key={step.path} className="flex items-center flex-shrink-0">
             {/* Connector */}
             {idx < STEPS.length - 1 && (
-              <div className={`w-8 h-0.5 mb-5 mx-0.5 transition-all duration-500
+              <div className={`w-5 md:w-8 h-0.5 mb-5 mx-0.5 transition-all duration-500 flex-shrink-0
                 ${idx < currentIdx ? 'bg-demo-success' : 'bg-demo-border'}`}
               />
             )}
 
             {/* Circle + label — קליקביל לניווט */}
             <button
+              ref={active ? activeRef : null}
               onClick={() => navigate(step.path)}
               title={`עבור ל${step.label}`}
-              className="flex flex-col items-center gap-1 group"
+              className="flex flex-col items-center gap-1 group flex-shrink-0"
             >
               <div className={`
                 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold

@@ -130,7 +130,7 @@ export default function Questionnaire() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-demo-bg overflow-x-hidden" dir="rtl">
+    <div className="flex flex-col h-dvh bg-demo-bg overflow-x-hidden" dir="rtl">
       <Header currentPath="/questionnaire" />
 
       <div className="flex-1 overflow-hidden flex flex-col">
@@ -148,9 +148,9 @@ export default function Questionnaire() {
           </div>
         )}
 
-        <div className="flex-1 overflow-hidden grid grid-cols-2 gap-0 min-h-0">
+        <div className="flex-1 overflow-y-auto md:overflow-hidden grid grid-cols-1 md:grid-cols-2 gap-0 min-h-0">
           {/* עמודה שמאל — פרטי תרגיל */}
-          <div className="border-l border-demo-border p-5 overflow-y-auto space-y-3">
+          <div className="border-l border-demo-border p-5 overflow-visible md:overflow-y-auto space-y-3">
             <h3 className="text-demo-gold font-bold text-xs uppercase tracking-wide">פרטי התרגיל</h3>
 
             <Field label="מטרה עיקרית">
@@ -267,7 +267,7 @@ export default function Questionnaire() {
           </div>
 
           {/* עמודה ימין — כשירות + סדן suggestion + המשך */}
-          <div className="p-5 overflow-y-auto space-y-4 min-h-0">
+          <div className="p-5 overflow-visible md:overflow-y-auto space-y-4 md:min-h-0">
             <div>
               <h3 className="text-demo-gold font-bold text-xs uppercase tracking-wide mb-3">רמת כשירות</h3>
               <div className="grid grid-cols-2 gap-3">

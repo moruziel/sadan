@@ -34,6 +34,22 @@ export default function Approvals() {
   const [goAnimation, setGoAnimation] = useState(false)
   const pollRef = useRef(null)
 
+  // ── מספר יעד לבדיקה — לטובת רז/ברומר שרוצים לקבל וואטסאפ/שיחה למספר שלהם ──
+  // ברירת מחדל: מור (כמו שהיה קבוע בקוד קודם). ניתן לערוך כאן או קולית ("תתקשר אלי במספר...").
+  const [targetPhone, setTargetPhone] = useState(CONTACTS.raz.wa)
+  const [editingPhone, setEditingPhone] = useState(false)
+
+  useEffect(() => {
+    function onFill(e) {
+      const { field_id, value } = e.detail ?? {}
+      if (field_id !== 'target_phone') return
+      const digits = String(value).replace(/\D/g, '')
+      if (digits.length >= 9) setTargetPhone(digits)
+    }
+    window.addEventListener('fillField', onFill)
+    return () => window.removeEventListener('fillField', onFill)
+  }, [])
+
   const selectedParty = parties.find(p => p.id === selected)
   const approved  = parties.filter(p => p.status === 'approved').length
   const total     = parties.length
@@ -67,12 +83,12 @@ export default function Approvals() {
       const caption = buildRtgMessage({ unit: 'גדוד 51 / פלוגה ב׳', field: '309ה — בטונדות', date: '05.05.2026', ammo: '5.56, חבלה מוגבלת' })
       // שולח תמונת שטח + טקסט ביחד (MediaMessage)
       await sendWhatsAppMedia({
-        phone: CONTACTS.raz.wa,
+        phone: targetPhone,
         mediaUrl: AREA_309_MAP_URL,
         caption,
       }).catch(() => {
         // fallback: טקסט בלבד אם תמונה נכשלה
-        sendWhatsApp(caption, CONTACTS.raz.wa).catch(() => {})
+        sendWhatsApp(caption, targetPhone).catch(() => {})
       })
 
       pollRef.current = setInterval(async () => {
@@ -115,7 +131,7 @@ export default function Approvals() {
   async function sendVoiceRequest(partyId) {
     setVoiceSending(prev => ({ ...prev, [partyId]: true }))
     try {
-      const phone = `+${CONTACTS.mor.wa}`
+      const phone = `+${targetPhone}`
       const result = await sendVoiceNote(phone, partyId).catch(() => ({ sent: true, script_text: approvalScripts[partyId] || '' }))
       const text = result.script_text || approvalScripts[partyId] || ''
       setVoiceTranscripts(prev => ({
@@ -139,8 +155,8 @@ export default function Approvals() {
 
   async function makePhoneCall(partyId) {
     const party = parties.find(p => p.id === partyId)
-    const phone = `+${CONTACTS.mor.wa}`
-    const displayPhone = CONTACTS.mor.phone  // מספר קריא לתצוגה
+    const phone = `+${targetPhone}`
+    const displayPhone = targetPhone  // מספר קריא לתצוגה
 
     setCallStatus(prev => ({ ...prev, [partyId]: 'calling' }))
     setResponses(prev => ({ ...prev, [partyId]: `📞 מתקשר ל${party?.contact || partyId} — ${displayPhone}` }))
@@ -173,7 +189,7 @@ export default function Approvals() {
   // ── GO/NO-GO ────────────────────────────────────────────
   function handleGoNoGo() {
     setGoGoTriggered(true)
-    sendVoiceNote('+972501234567', 'gonogo').catch(() => {})
+    sendVoiceNote(`+${targetPhone}`, 'gonogo').catch(() => {})
     // simulate approval in 4 sec
     setTimeout(() => setGoAnimation(true), 4000)
   }
@@ -195,7 +211,7 @@ export default function Approvals() {
         </div>
       )}
 
-      <div className="flex flex-col h-screen bg-demo-bg" dir="rtl">
+      <div className="flex flex-col h-dvh bg-demo-bg" dir="rtl">
         <Header currentPath="/approvals" />
 
         <div className="flex items-center justify-between px-6 py-2.5 border-b border-demo-border flex-shrink-0">
@@ -204,11 +220,32 @@ export default function Approvals() {
             <h2 className="text-white font-bold text-sm">מסלול אישורים</h2>
             <p className="text-gray-500 text-xs">תרגיל איגוף מדרום — שטח 309ה</p>
           </div>
-          {allBlockersDone && (
-            <span className="bg-demo-success/20 text-demo-success border border-demo-success/30 text-xs font-bold px-3 py-1 rounded-full">
-              🟢 כל התנאים מולאו
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {editingPhone ? (
+              <input
+                autoFocus
+                type="tel"
+                defaultValue={`+${targetPhone}`}
+                onBlur={e => { const d = e.target.value.replace(/\D/g, ''); if (d.length >= 9) setTargetPhone(d); setEditingPhone(false) }}
+                onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}
+                dir="ltr"
+                className="w-32 bg-demo-card border border-demo-gold/40 rounded-lg px-2 py-1 text-xs text-white text-center"
+              />
+            ) : (
+              <button
+                onClick={() => setEditingPhone(true)}
+                title="מספר יעד לבדיקה — לוואטסאפ ושיחות מסך זה. אפשר גם קולית: 'תתקשר אלי במספר...'"
+                className="flex items-center gap-1 text-gray-400 hover:text-demo-gold text-xs border border-demo-border hover:border-demo-gold/40 rounded-lg px-2 py-1 transition-colors"
+              >
+                📞 +{targetPhone} ✏️
+              </button>
+            )}
+            {allBlockersDone && (
+              <span className="bg-demo-success/20 text-demo-success border border-demo-success/30 text-xs font-bold px-3 py-1 rounded-full">
+                🟢 כל התנאים מולאו
+              </span>
+            )}
+          </div>
         </div>
 
         {/* RULES-001: רטג לא זמין */}
@@ -218,9 +255,9 @@ export default function Approvals() {
           </div>
         )}
 
-        <div className="flex flex-1 overflow-hidden min-h-0">
+        <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden min-h-0">
           {/* טבלת גורמים */}
-          <div className="w-64 border-r border-demo-border flex flex-col flex-shrink-0">
+          <div className="w-full md:w-64 max-h-[40vh] md:max-h-none border-b md:border-b-0 md:border-r border-demo-border flex flex-col flex-shrink-0">
             {/* Progress */}
             <div className="px-4 py-3 border-b border-demo-border flex-shrink-0">
               <div className="flex justify-between text-xs text-gray-400 mb-1.5">
@@ -285,7 +322,7 @@ export default function Approvals() {
           </div>
 
           {/* פאנל פרטים */}
-          <div key={selected} className="flex-1 overflow-y-auto p-5 animate-fade-in">
+          <div key={selected} className="overflow-visible md:flex-1 md:overflow-y-auto p-5 animate-fade-in">
             {selectedParty && (() => {
               const Icon   = ICON_MAP[selectedParty.icon] || MapPin
               const config = STATUS_CONFIG[selectedParty.status] || STATUS_CONFIG.pending

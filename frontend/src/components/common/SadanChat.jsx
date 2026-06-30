@@ -3,8 +3,10 @@ import { MessageSquare, ChevronLeft, Volume2, Send, Loader } from 'lucide-react'
 import { sendWhatsAppMedia, sendWhatsApp } from '../../api/whatsapp'
 import { CONTACTS, buildSisoAirforceMessage } from '../../data/contacts'
 
-const API_REST = 'http://localhost:8000/api/voice'
-const WS_URL   = 'ws://localhost:8000/gemini-voice/ws'
+// Relative to current origin — works identically on localhost (desktop dev)
+// and through the Cloudflare tunnel (phone), both proxied by Vite (vite.config.js).
+const API_REST = '/api/voice'
+const WS_URL   = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/gemini-voice/ws'
 const NUM_BARS = 12
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -41,6 +43,15 @@ const SADAN_COMMANDS = [
         handled: true,
         reply: `🗺️ עוברת לתצוגת תלת-מימד.\n\nבתצוגה זו ניתן לראות את העומק הטופוגרפי של שטח 309ה — כיפות הבטון, הצלעות, והרמות השולטות.\n\nהכוח המחפה יוצב על הכיפה השולטת לפי עיקרון "שליטה — ירי — מחסה".`,
       }
+    },
+  },
+
+  // ── מקרא המפה ──────────────────────────────────────────────────────────────
+  {
+    re: /מקרא|הסבר.?סימונים|מה.?הסימונים|legend/i,
+    handler: () => {
+      simDispatch('sadan:toggle_legend')
+      return { handled: true, reply: '🗺️ מציגה/מסתירה את מקרא הסימונים על המפה.' }
     },
   },
 
@@ -415,6 +426,18 @@ const SADAN_COMMANDS = [
     },
   },
 
+  // יעד לבדיקה — מספר טלפון להתקשרות/וואטסאפ (מסך אישורים)
+  {
+    re: /(?:תתקשר|התקשר|שלח.?(וואטסאפ|וצאפ)|חייג).{0,12}(?:אל[יי]|למספר|במספר).{0,4}\d{7,}/i,
+    handler: (text) => {
+      const m = text.match(/(0\d{8,9}|972\d{8,9})/)
+      if (!m) return { handled: false }
+      const digits = m[1].startsWith('0') ? '972' + m[1].slice(1) : m[1]
+      simDispatch('fillField', { field_id: 'target_phone', value: digits })
+      return { handled: true, reply: `📞 עדכנתי את מספר היעד לבדיקה ל-+${digits}.` }
+    },
+  },
+
   // בחר שטח מוקצה
   {
     re: /בחר.?שטח.?מוקצה|שטח.?309|עבור.?לשטח.?(מוקצה|309)|המשך.?לשטח/i,
@@ -730,6 +753,9 @@ export default function SadanChat({ autoOpen = false, visible = true, currentScr
   // Auto-reconnect
   const wantConnected     = useRef(false)   // user intent: true = stay connected
   const reconnectTimer    = useRef(null)
+  // Screen Wake Lock moved to App.jsx — keeps the screen awake for the whole app
+  // session (not just while voice is connected), with a fallback for browsers that
+  // don't support the Wake Lock API (older iOS Safari etc).
 
   useEffect(() => {
     messagesEnd.current?.scrollIntoView({ behavior: 'smooth' })
@@ -1073,6 +1099,10 @@ export default function SadanChat({ autoOpen = false, visible = true, currentScr
               }])
             } else if (msg.type === 'toggle_3d') {
               window.dispatchEvent(new CustomEvent('sadan:toggle3d'))
+            } else if (msg.type === 'toggle_legend') {
+              window.dispatchEvent(new CustomEvent('sadan:toggle_legend'))
+            } else if (msg.type === 'toggle_layers_panel') {
+              window.dispatchEvent(new CustomEvent('sadan:toggle_layers_panel'))
             } else if (msg.type === 'map_fly_to') {
               window.dispatchEvent(new CustomEvent('sadan:map_command', {
                 detail: { action: 'fly_to', lng: msg.lng, lat: msg.lat, zoom: msg.zoom, bearing: msg.bearing, pitch: msg.pitch, duration_ms: msg.duration_ms }
@@ -1265,8 +1295,7 @@ export default function SadanChat({ autoOpen = false, visible = true, currentScr
 
       {/* ── פאנל צ'אט — תמיד ב-DOM, מחליק פנימה/החוצה ──── */}
       <div
-        className={`sadan-panel fixed bottom-0 left-0 top-0 z-50 flex flex-col ${open ? 'open' : ''}`}
-        style={{ width: '350px' }}
+        className={`sadan-panel fixed bottom-0 left-0 top-0 z-50 flex flex-col w-full md:w-[350px] ${open ? 'open' : ''}`}
         dir="rtl"
       >
           <div

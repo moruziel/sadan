@@ -274,17 +274,29 @@ export default function Area() {
   const [selectedField, setSelectedField] = useState(null)
   const [showDiagram, setShowDiagram]     = useState(false)
   const [onlyAvailable, setOnlyAvailable] = useState(false)
+  const [layersOpen, setLayersOpen]       = useState(false)  // closed by default — decluttered map
 
-  // ── SADAN voice: show/hide layer ─────────────────────────
+  // ── SADAN voice: show/hide layer (layer="all" toggles every layer at once) ─
   useEffect(() => {
     const handle = (e) => {
       const { layer, visible } = e.detail
-      if (layer in { forces:1, hazards:1, infrastructure:1, neighbors:1, history:1 }) {
+      if (layer === 'all') {
+        setLayers(prev => Object.fromEntries(Object.keys(prev).map(k => [k, visible])))
+        return
+      }
+      if (layer in { forces:1, hazards:1, infrastructure:1, neighbors:1, history:1, natbam:1 }) {
         setLayers(prev => ({ ...prev, [layer]: visible }))
       }
     }
     window.addEventListener('sadan:show_layer', handle)
     return () => window.removeEventListener('sadan:show_layer', handle)
+  }, [])
+
+  // ── SADAN voice/text: toggle the layer-button panel itself ──
+  useEffect(() => {
+    const handle = () => setLayersOpen(v => !v)
+    window.addEventListener('sadan:toggle_layers_panel', handle)
+    return () => window.removeEventListener('sadan:toggle_layers_panel', handle)
   }, [])
 
   function toggleLayer(key) {
@@ -302,45 +314,21 @@ export default function Area() {
   // ── Single-field mode — map fills full screen ─────────
   if (mode === 'single') {
     return (
-      <div className="flex flex-col h-screen bg-demo-bg" dir="rtl">
+      <div className="flex flex-col h-dvh bg-demo-bg" dir="rtl">
         <Header currentPath="/area" />
         {showDiagram && <DataSourcesDiagram onClose={() => setShowDiagram(false)} />}
         <div className="flex-1 relative min-h-0 overflow-hidden">
-          <MapView layers={layers} />
+          {/* כל בקרות התצוגה (3D/שכבות/מקרא/מקורות) מאוחדות בכפתור-יחיד + גליון אחד בתוך MapView —
+              ר' תוכנית "עיצוב UX — מסך מפה": לא יותר מ-2 אשכולות עצמאיים על המפה. */}
+          <MapView layers={layers} toggleLayer={toggleLayer} onShowDiagram={() => setShowDiagram(true)} />
 
-          {/* שכבות מידע — שמאל עליון */}
-          <div className="absolute top-4 left-3 z-10 flex flex-col gap-1.5">
-            <button
-              onClick={() => setShowDiagram(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-md bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm hover:text-demo-gold hover:border-demo-gold/40"
-            >
-              <Info size={13} />
-              מקורות
-            </button>
-            {LAYER_OPTIONS.map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => toggleLayer(key)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all
-                  bg-black/40 backdrop-blur-sm
-                  ${layers[key]
-                    ? `border-2 ${key === 'natbam' ? 'border-red-400 text-red-300' : 'border-demo-gold text-demo-gold'}`
-                    : 'border border-white/20 text-gray-400'
-                  }`}
-              >
-                <Icon size={13} />
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* כפתורי פעולה — ימין תחתון */}
+          {/* כפתורי פעולה — ימין תחתון. פעולה ראשית אחת בולטת + משנית קטנה יותר */}
           <div className="absolute bottom-6 right-5 z-10 flex flex-col gap-2 items-end">
             <button
               onClick={() => handleContinue('calendar')}
-              className="flex items-center gap-2 px-4 py-2.5 bg-demo-surface/95 backdrop-blur-sm border border-demo-border text-demo-gold font-semibold rounded-xl text-sm shadow-lg hover:border-demo-gold/60 transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-demo-surface/90 backdrop-blur-sm border border-demo-border text-gray-300 font-medium rounded-lg text-xs shadow-md hover:text-demo-gold hover:border-demo-gold/40 transition-all"
             >
-              <Calendar size={15} />
+              <Calendar size={13} />
               יומן זמינות
             </button>
             <button
@@ -358,13 +346,13 @@ export default function Area() {
 
   // ── Region/free/urgent mode ────────────────────────────
   return (
-    <div className="flex flex-col h-screen bg-demo-bg" dir="rtl">
+    <div className="flex flex-col h-dvh bg-demo-bg" dir="rtl">
       <Header currentPath="/area" />
       {showDiagram && <DataSourcesDiagram onClose={() => setShowDiagram(false)} />}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
 
-        {/* פאנל ימין */}
-        <div className="w-80 bg-white text-gray-800 flex flex-col overflow-hidden shadow-2xl">
+        {/* פאנל ימין — full-width stacked on mobile, fixed sidebar on desktop */}
+        <div className="w-full md:w-80 max-h-[45vh] md:max-h-none bg-white text-gray-800 flex flex-col overflow-hidden shadow-2xl">
           {selectedField ? (
             <FieldInfoPanel
               field={selectedField}
@@ -398,7 +386,14 @@ export default function Area() {
               <Info size={13} />
               מקורות
             </button>
-            {LAYER_OPTIONS.map(({ key, label, icon: Icon }) => (
+            <button
+              onClick={() => setLayersOpen(v => !v)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-md bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm hover:text-demo-gold hover:border-demo-gold/40"
+            >
+              <Layers size={13} />
+              {layersOpen ? '▾' : '▸'} שכבות מידע
+            </button>
+            {layersOpen && LAYER_OPTIONS.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
                 onClick={() => toggleLayer(key)}
