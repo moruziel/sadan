@@ -21,7 +21,11 @@ app.use(express.json({ type: 'application/json' }))
 // ── WhatsApp Client ────────────────────────────────────────
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: './.wwebjs_auth' }),
-  puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] },
+  puppeteer: {
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+  },
 })
 
 let ready    = false

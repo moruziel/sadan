@@ -1,0 +1,58 @@
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/backend.Dockerfile
+    env_file:
+      - /opt/sadan/secrets/.env
+    volumes:
+      - hf_cache:/data/hf_cache
+      - /opt/sadan/secrets/vonage_private.key:/app/vonage_private.key:ro
+      - /opt/sadan/secrets/sadan.db:/app/sadan.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  whatsapp:
+    build:
+      context: ..
+      dockerfile: deploy/whatsapp.Dockerfile
+    volumes:
+      - wa_auth:/app/.wwebjs_auth
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  caddy_data:
+  caddy_config:
+  hf_cache:
+  wa_auth:
