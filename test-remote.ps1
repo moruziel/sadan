@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 #  SADAN - Remote System Test (go/no-go for the cloud demo)
 #  Run: powershell -ExecutionPolicy Bypass -File C:\Users\moruziel\sadan\test-remote.ps1
 #
