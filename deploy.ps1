@@ -44,7 +44,7 @@ if ($Tag) {
     }
     $version = "demo-v$next"
     git tag $version
-    git push origin $version
+    git -c http.proxy="" push origin $version
     Write-OK "$version (tag נוצר ונדחף)"
 }
 
