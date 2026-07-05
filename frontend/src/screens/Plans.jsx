@@ -6,6 +6,7 @@ import BackButton from '../components/common/BackButton'
 import Badge from '../components/common/Badge'
 import DataSourcesDiagram from '../components/common/DataSourcesDiagram'
 import { PLANS } from '../data/mockData'
+import sadanContext from '../services/sadanContext'
 
 // ── מפות SVG משודרגות ──────────────────────────────────────
 function MiniMap({ plan, isSelected }) {
@@ -132,6 +133,14 @@ export default function Plans() {
   const [loading,      setLoading]      = useState(false)
   const [buildMode,    setBuildMode]    = useState('ready') // 'ready' | 'scratch'
   const [showDiagram,  setShowDiagram]  = useState(false)
+
+  // Report plan-selection state to SADAN (voice context)
+  useEffect(() => {
+    const names = { plan_1: "מתווה א' (איגוף)", plan_2: "מתווה ב' (חזיתי)", plan_3: "מתווה ג' (לילי)" }
+    sadanContext.setScreen('plans', {
+      'מתווה נבחר': selected ? names[selected] || selected : 'טרם נבחר',
+    })
+  }, [selected])
 
   // SADAN voice: "בחר מתווה א/ב/ג" → setSelected + handleChoose
   useEffect(() => {

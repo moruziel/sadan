@@ -65,6 +65,77 @@ SADAN_SYSTEM_PROMPT = """\
 \
 """
 
+# ── Screen guide — what SADAN knows about each screen ─────────────────────────
+# Sent to Gemini as a system message on every screen change, so it can explain
+# what the user sees, guide them, and use the right tools.
+SCREEN_GUIDE: dict = {
+    "field-selection": (
+        "מסך בחירת אופן חיפוש שטח. המשתמש רואה 3 אפשרויות: "
+        "'מגזרה מוקצית' (גזרת הגולן — האפשרות לדמו), 'חיפוש חופשי', 'אימון דחוף'. "
+        "הדרכה: המלץ לבחור 'מגזרה מוקצית' כדי לראות את שטחי הגזרה על המפה."
+    ),
+    "area": (
+        "מסך מפת השטח — מפה תלת-ממדית של שטח אש 309ה בגולן. "
+        "המשתמש רואה: גבול השטח, שכבות מידע (כוחות/מפגעים/תשתיות/שכנים/היסטוריה/נת\"ב), "
+        "כפתורי 2D/3D, ופאנל מידע על השטח. "
+        "כלים: map_show_element להצגת אלמנטים (מנחת, קו מתח, שמורה, עתיקות, יעדים...), "
+        "map_show_layer לשכבות, toggle_3d, map_fly_to/zoom/rotate. "
+        "המשך הזרימה: כפתור 'המשך לשאלון' או app_navigate(questionnaire)."
+    ),
+    "calendar": (
+        "מסך יומן שטחים — לוח זמינות בסגנון Booking. "
+        "המשתמש רואה רשימת שטחים בצד ולוח שבועיים עם תפוסות (איזה גדוד תפס איזה יום). "
+        "אפשר לבחור טווח תאריכים פנוי וללחוץ 'תפוס שטח'."
+    ),
+    "questionnaire": (
+        "מסך שאלון הגדרת תרגיל. שדות: מטרת אימון (objective), נושא (topic), "
+        "רמת כשירות (readiness: א/ב/ג/ד), תנאי ירי (רטוב/יבש), תחמושת (ammo), "
+        "תאריך (date), גודל כוח (forceSize), הרכב (composition), ושת\"פ יחידות. "
+        "כלי: fill_field למילוי שדות בקול. "
+        "בתרגיל רטוב — פינוי רכוב מתווסף אוטומטית לשת\"פ. "
+        "המשך הזרימה: כפתור 'המשך' → מסך המתווים."
+    ),
+    "plans": (
+        "מסך 3 מתווים מוצעים. המשתמש רואה 3 כרטיסים עם מפה מוקטנת, סיפור מתווה וציון התאמה: "
+        "מתווה א' — איגוף, 9 יעדים, ציון 89. מתווה ב' — חזיתי, 5 יעדים, ציון 76. "
+        "מתווה ג' — לילי, 4 יעדים ללא ירי חי, ציון 72. "
+        "הדרכה: הסבר את ההבדלים, המפקד בוחר. בחירה → תיק תרגיל נבנה אוטומטית."
+    ),
+    "exercise": (
+        "מסך תיק התרגיל — המסמך המלא. sidebar עם טאבים: "
+        "כללי, בטיחות, ירי ושטחים, נת\"בים, לוגיסטיקה, תדריך, שת\"פ יחידות, נוהל קרב. "
+        "בטאב ירי — מערכות מסונכרנות (קרקע בטוחה, מאור). "
+        "יש כפתורי ייצוא (מייל/יומן/PDF). "
+        "המשך הזרימה: בוחן הכנה (quiz) לפני האישורים."
+    ),
+    "quiz": (
+        "מסך בוחן הכנה — 5 שאלות מתוך תיק התרגיל, סף מעבר 4/5. "
+        "המשתמש עונה על שאלות אמריקאיות. אפשר לענות בקול: 'שאלה 3 תשובה ב'. "
+        "לאחר מעבר — ממשיכים למסך האישורים."
+    ),
+    "approvals": (
+        "מסך סבב אישורים — טבלת גורמי תיאום: שטחים, רפואה, קשר, תחמוש, לוגיסטיקה, "
+        "רטג, חי\"א (מסוק), בטיחות, קרקע בטוחה, ו-GO/NO-GO של המתא\"ם בסוף. "
+        "ליד חלק מהגורמים כפתור 'התקשר' — שיחת טלפון אמיתית של סדן לגורם. "
+        "GO/NO-GO נפתח רק כשכל השאר ירוק. זהו שיא הדמו — סדן מתקשר ומקבל אישור בקול."
+    ),
+    "simulation": (
+        "מסך סימולציה טקטית — הרצת התרגיל על המפה בשלבים: "
+        "כינוס, תנועה, ביסוס, כיסוי, הסתערות יעד א', מעבר, כיבוש יעד ב', נסיגה. "
+        "כוחות: נמר-7 (מ\"מ), נמר-71 (כיתה א' מסתערת), נמר-72 (כיתה ב' מחפה), נמר-73 (כיתה ג'). "
+        "כלים: sim_goto_phase, sim_pause, sim_resume, sim_show_unit, toggle_3d."
+    ),
+}
+
+
+def _format_context(screen: str, state: dict) -> str:
+    """Compact Hebrew one-liner for a context_update system message."""
+    parts = [f"מסך={screen}"]
+    for k, v in (state or {}).items():
+        parts.append(f"{k}={v}")
+    return " | ".join(parts)
+
+
 # ── Field element lookup table ─────────────────────────────────────────────────
 # All coordinates and metadata for 309h training area elements.
 # map_show_element tool uses this dict to fly the map and expose layer info.
@@ -742,21 +813,23 @@ class GeminiLivePipeline:
 
                         elif msg_type == "screen_change":
                             screen = ctrl.get("screen", "")
-                            _SCREEN_NAMES = {
-                                "/area":            "area",
-                                "/field-selection": "field-selection",
-                                "/questionnaire":   "questionnaire",
-                                "/plans":           "plans",
-                                "/exercise":        "exercise",
-                                "/quiz":            "quiz",
-                                "/approvals":       "approvals",
-                                "/simulation":      "simulation",
-                            }
-                            screen_key = _SCREEN_NAMES.get(screen, screen.lstrip("/"))
-                            await session.send_realtime_input(
-                                text=f"[מידע מערכת: screen={screen_key}]"
-                            )
+                            screen_key = screen.lstrip("/") or screen
+                            guide = SCREEN_GUIDE.get(screen_key, "")
+                            text = f"[מידע מערכת: המשתמש עבר למסך {screen_key}."
+                            if guide:
+                                text += f" {guide}"
+                            text += "]"
+                            await session.send_realtime_input(text=text)
                             logger.info(f"[Gemini Live] screen_change → {screen}")
+
+                        elif msg_type == "context_update":
+                            screen = ctrl.get("screen", "")
+                            state = ctrl.get("state", {}) or {}
+                            ctx_line = _format_context(screen, state)
+                            await session.send_realtime_input(
+                                text=f"[מידע מערכת: מצב נוכחי — {ctx_line}]"
+                            )
+                            logger.info(f"[Gemini Live] context_update → {ctx_line[:100]}")
 
                     except Exception:
                         pass

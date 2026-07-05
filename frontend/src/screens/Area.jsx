@@ -12,6 +12,7 @@ import Badge from '../components/common/Badge'
 import DataSourcesDiagram from '../components/common/DataSourcesDiagram'
 import { AREA_309 } from '../data/mockData'
 import { DEMO_FIELDS_251 } from '../data/region251.js'
+import sadanContext from '../services/sadanContext'
 
 const LAYER_OPTIONS = [
   { key: 'forces',        label: 'כוחות',     icon: Target },
@@ -275,6 +276,17 @@ export default function Area() {
   const [showDiagram, setShowDiagram]     = useState(false)
   const [onlyAvailable, setOnlyAvailable] = useState(false)
   const [layersOpen, setLayersOpen]       = useState(false)  // closed by default — decluttered map
+
+  // Report map-screen state to SADAN (voice context)
+  useEffect(() => {
+    const layerNames = { forces: 'כוחות', hazards: 'מפגעים', infrastructure: 'תשתיות', neighbors: 'שכנים', history: 'היסטוריה', natbam: 'נת"ב' }
+    const active = Object.entries(layers).filter(([, v]) => v).map(([k]) => layerNames[k]).join(', ')
+    sadanContext.setScreen('area', {
+      'מצב': mode === 'region' ? 'תצוגת גזרה מלאה' : 'שטח 309ה',
+      'שכבות דלוקות': active || 'אין',
+      'שטח נבחר': selectedField?.name || '',
+    })
+  }, [layers, selectedField, mode])
 
   // ── SADAN voice: show/hide layer (layer="all" toggles every layer at once) ─
   useEffect(() => {

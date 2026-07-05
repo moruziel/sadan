@@ -12,6 +12,7 @@ import BackButton from '../components/common/BackButton'
 import DataSourcesDiagram from '../components/common/DataSourcesDiagram'
 import { EXERCISE_FILE } from '../data/mockData'
 import CombatProcedure from '../components/CombatProcedure'
+import sadanContext from '../services/sadanContext'
 
 const ICON_MAP = { ClipboardList, ShieldCheck, Target, AlertTriangle, CheckSquare, Megaphone, FileText, Handshake, Package, Sword }
 
@@ -609,6 +610,18 @@ export default function Exercise() {
   const [activeId,    setActiveId]    = useState(initialTab)
   const [showDiagram, setShowDiagram] = useState(false)
   const [visited,     setVisited]     = useState(new Set([initialTab]))
+
+  // Report active tab to SADAN (voice context)
+  useEffect(() => {
+    const tabNames = {
+      general: 'כללי', safety: 'בטיחות', fire: 'ירי ושטחים', natbam: 'נת"בים',
+      logistics: 'לוגיסטיקה', briefing: 'תדריך', collab: 'שת"פ יחידות', combat: 'נוהל קרב',
+    }
+    sadanContext.setScreen('exercise', {
+      'טאב פעיל': tabNames[activeId] || activeId,
+      'טאבים שנצפו': visited.size,
+    })
+  }, [activeId, visited])
 
   function handleTabClick(id) {
     setActiveId(id)

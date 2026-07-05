@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, CheckCircle, XCircle, Mic, Send, Loader2, Info, MessageCircle, X } from 'lucide-react'
 import Header from '../components/common/Header'
 import BackButton from '../components/common/BackButton'
+import sadanContext from '../services/sadanContext'
 import { QUIZ_QUESTIONS, QUIZ_OPEN_QUESTION } from '../data/mockData'
 
 const TOTAL  = QUIZ_QUESTIONS.length
@@ -376,6 +377,20 @@ export default function Quiz() {
   const [openDone,    setOpenDone]    = useState(false)
   const [sadanFilled, setSadanFilled] = useState({})   // { questionId: true } — gold flash
   const flashTimers = useRef({})
+
+  // Report quiz progress to SADAN (voice context)
+  useEffect(() => {
+    const answered = Object.keys(answers).length
+    const ctx = {
+      'שאלות במבחן': TOTAL,
+      'נענו': answered,
+    }
+    if (submitted) {
+      ctx['הוגש'] = 'כן'
+      ctx['ציון'] = `${QUIZ_QUESTIONS.filter(q => answers[q.id] === q.correct).length}/${TOTAL}`
+    }
+    sadanContext.setScreen('quiz', ctx)
+  }, [answers, submitted])
 
   // SADAN voice → fill answer
   useEffect(() => {

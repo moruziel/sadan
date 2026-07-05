@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
 import Header from '../components/common/Header'
+import sadanContext from '../services/sadanContext'
 
 const OPTIONS = [
   {
@@ -27,6 +28,11 @@ const OPTIONS = [
 
 export default function FieldSelection() {
   const navigate = useNavigate()
+
+  // Report screen to SADAN (voice context)
+  useEffect(() => {
+    sadanContext.setScreen('field-selection', {})
+  }, [])
 
   function handleSelect(mode) {
     navigate('/area', { state: { mode } })

@@ -7,6 +7,7 @@ import { COORDINATION_PARTIES } from '../data/mockData'
 import { sendWhatsApp, sendWhatsAppMedia, getIncomingMessages, sendVoiceNote, buildRtgMessage, AREA_309_MAP_URL } from '../api/whatsapp'
 import { CONTACTS } from '../data/contacts'
 import { approvalScripts } from '../data/approvalScripts.js'
+import sadanContext from '../services/sadanContext'
 
 const ICON_MAP = { MapPin, ShieldCheck, Heart, Crosshair, Truck, Radio, Eye, Users, Globe, Plane }
 
@@ -55,6 +56,17 @@ export default function Approvals() {
   const total     = parties.length
   const pct       = Math.round((approved / total) * 100)
   const allBlockersDone = parties.filter(p => p.blocker).every(p => p.status === 'approved')
+
+  // Report approvals status to SADAN (voice context)
+  useEffect(() => {
+    const pending = parties.filter(p => p.status !== 'approved').map(p => p.name).join(', ')
+    sadanContext.setScreen('approvals', {
+      'אושרו': `${approved}/${total}`,
+      'ממתינים': pending || 'אין — הכל אושר',
+      'גורם נבחר': selectedParty?.name || '',
+      'GO/NO-GO': goGoTriggered ? 'התקבל GO — מאושר לביצוע' : (allBlockersDone ? 'זמין לבקשה' : 'נעול עד השלמת אישורים'),
+    })
+  }, [parties, selected, goGoTriggered, approved, total, allBlockersDone, selectedParty])
 
   // RULES-001: אחרי 16:00 — פקח רטג לא זמין
   const hour = new Date().getHours()

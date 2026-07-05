@@ -2,11 +2,12 @@
  * AreaCalendar — יומן זמינות שטחי אש
  * Booking-style: 5 שטחים × 14 ימים
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Calendar, AlertTriangle, CheckCircle } from 'lucide-react'
 import Header from '../components/common/Header'
 import { fieldBookings, calendarFields, generate14Days } from '../data/calendar.js'
+import sadanContext from '../services/sadanContext'
 
 const DAYS = generate14Days()
 const MONTH_LABEL = 'אפריל–מאי 2026'
@@ -104,6 +105,16 @@ export default function AreaCalendar() {
   const [selectedDate,    setSelectedDate]     = useState(null)
   const [requestSent,     setRequestSent]      = useState(false)
   const [conflictField,   setConflictField]    = useState(null)
+
+  // Report calendar state to SADAN (voice context)
+  useEffect(() => {
+    const fieldName = calendarFields.find(f => f.id === selectedField)?.name || selectedField
+    sadanContext.setScreen('calendar', {
+      'שטח מסונן': fieldName,
+      'תאריך נבחר': selectedDate || 'טרם נבחר',
+      'בקשה נשלחה': requestSent ? 'כן' : '',
+    })
+  }, [selectedField, selectedDate, requestSent])
 
   function handleDateSelect(fieldId, date) {
     const booking = getBooking(fieldId, date)

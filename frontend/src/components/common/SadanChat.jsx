@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { MessageSquare, ChevronLeft, Volume2, Send, Loader } from 'lucide-react'
 import { sendWhatsAppMedia, sendWhatsApp } from '../../api/whatsapp'
 import { CONTACTS, buildSisoAirforceMessage } from '../../data/contacts'
+import sadanContext from '../../services/sadanContext'
 
 // Relative to current origin — works identically on localhost (desktop dev)
 // and through the Cloudflare tunnel (phone), both proxied by Vite (vite.config.js).
@@ -1197,6 +1198,22 @@ export default function SadanChat({ autoOpen = false, visible = true, currentScr
   // Reset screenSentRef on disconnect so reconnect re-sends the current screen
   useEffect(() => {
     if (!connected) screenSentRef.current = ''
+  }, [connected])
+
+  // ── Context sync — screens report state via sadanContext, forward to Gemini ──
+  useEffect(() => {
+    if (!connected) return
+    const unsubscribe = sadanContext.subscribe(({ screen, state }) => {
+      if (!screen) return
+      if (wsRef.current?.readyState !== WebSocket.OPEN) return
+      wsRef.current.send(JSON.stringify({ type: 'context_update', screen, state }))
+    })
+    // Push the current context immediately on (re)connect so Gemini isn't blind
+    const { screen, state } = sadanContext.get()
+    if (screen && wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'context_update', screen, state }))
+    }
+    return unsubscribe
   }, [connected])
 
   // ── Real-time audio level → Login waveform ────────────────

@@ -11,6 +11,7 @@ import { ChevronLeft, ChevronRight, Play, Pause, RotateCcw, Crosshair, Volume2, 
 import { AREA_309 } from '../data/mockData'
 import { SIM_UNITS, SIM_PHASES } from '../data/simulationData'
 import useSimulation from '../hooks/useSimulation'
+import sadanContext from '../services/sadanContext'
 
 // ── map base style ────────────────────────────────────────────────────────────
 const MAP_STYLE = {
@@ -367,6 +368,16 @@ export default function Simulation() {
 
   const sim = useSimulation()
   const { phase, playing, currentData, total, togglePlay, nextPhase, prevPhase, gotoPhase, pause } = sim
+
+  // Report simulation state to SADAN (voice context)
+  useEffect(() => {
+    sadanContext.setScreen('simulation', {
+      'שלב': `${phase + 1}/${total} — ${currentData?.longLabel || currentData?.label || ''}`,
+      'מצב': playing ? 'רץ' : 'מושהה',
+      'תצוגה': is3d ? 'תלת-מימד' : 'דו-מימד',
+      'יחידה בפוקוס': unitInfo ? `${unitInfo.label} (${unitInfo.callsign})` : '',
+    })
+  }, [phase, playing, is3d, unitInfo, total, currentData])
 
   // ── init map ──────────────────────────────────────────────────────────────
   useEffect(() => {

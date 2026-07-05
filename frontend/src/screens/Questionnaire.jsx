@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { AlertCircle, ChevronLeft, Plus, X } from 'lucide-react'
 import Header from '../components/common/Header'
 import BackButton from '../components/common/BackButton'
+import sadanContext from '../services/sadanContext'
 
 const READINESS_LEVELS = [
   { value: 'aleph', label: 'א׳', sub: 'ראשונה', desc: 'כשיר לחלוטין — כל מסלולי אש פתוחים',         color: 'green',  blocked: false },
@@ -60,6 +61,22 @@ export default function Questionnaire() {
   const [sadanAccepted,  setSadanAccepted]  = useState(false)
   const [sadanFilled,    setSadanFilled]    = useState({})   // { fieldId: true } — brief gold flash
   const flashTimers = useRef({})
+
+  // Report questionnaire state to SADAN (voice context)
+  useEffect(() => {
+    const readinessNames = { aleph: 'א', bet: 'ב', gimel: 'ג', dalet: 'ד' }
+    sadanContext.setScreen('questionnaire', {
+      'מטרה': form.objective,
+      'נושא': form.topic,
+      'תנאי ירי': form.firingCond,
+      'תחמושת': form.ammo,
+      'תאריך': form.date,
+      'כשירות': form.readiness ? readinessNames[form.readiness] || form.readiness : 'טרם נבחרה',
+      'גודל כוח': form.forceSize,
+      'הרכב': form.composition,
+      'שת"פ': collabItems.length ? collabItems.map(c => c.label || c.id).join(', ') : 'אין',
+    })
+  }, [form, collabItems])
 
   // ── SADAN voice fill ──────────────────────────────────────────────────────
   useEffect(() => {
