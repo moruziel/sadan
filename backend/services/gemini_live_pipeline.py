@@ -1121,15 +1121,16 @@ class GeminiLivePipeline:
             logger.warning(f"[Gemini Live] Receive error: {e}")
 
     async def _do_send_whatsapp(self, message: str):
-        """Send a WhatsApp message via the local WhatsApp server (localhost:3001/send)."""
+        """Send a WhatsApp message via the WhatsApp server (settings.whatsapp_url)."""
         if not message:
             logger.warning("[Gemini Live] send_whatsapp called with empty message")
             return
         try:
             import httpx
+            from backend.config import settings
             async with httpx.AsyncClient(timeout=8) as client:
                 resp = await client.post(
-                    "http://localhost:3001/send",
+                    f"{settings.whatsapp_url}/send",
                     json={"message": message},
                 )
                 data = resp.json()
@@ -1239,6 +1240,8 @@ class GeminiVonagePipeline:
                     )
                 )
             ),
+            output_audio_transcription=types.AudioTranscriptionConfig(language_codes=["he-IL"]),
+            input_audio_transcription=types.AudioTranscriptionConfig(language_codes=["he-IL"]),
             tools=tools if tools else None,
         )
 
@@ -1357,6 +1360,12 @@ class GeminiVonagePipeline:
                                 if buf:
                                     await self.websocket.send_bytes(bytes(buf))
 
+                    if sc.input_transcription and sc.input_transcription.text:
+                        logger.info(f"[Gemini Vonage] 🎤 heard: {repr(sc.input_transcription.text[:80])}")
+
+                    if sc.output_transcription and sc.output_transcription.text:
+                        logger.info(f"[Gemini Vonage] 🔊 said: {repr(sc.output_transcription.text[:80])}")
+
                     if sc.interrupted:
                         logger.info("[Gemini Vonage] ↩ Barge-in detected")
 
@@ -1368,15 +1377,16 @@ class GeminiVonagePipeline:
             print(f"[DIAG] _receive_audio ERROR after {responses_received} responses: {type(e).__name__}: {e}", flush=True)
 
     async def _do_send_whatsapp(self):
-        """Send exercise details via WhatsApp server (localhost:3001/send)."""
+        """Send exercise details via WhatsApp server (settings.whatsapp_url)."""
         if not self.whatsapp_message or not self.whatsapp_to:
             logger.warning("[Gemini Vonage] send_whatsapp called but no message/phone configured")
             return
         try:
             import httpx
+            from backend.config import settings
             async with httpx.AsyncClient(timeout=8) as client:
                 resp = await client.post(
-                    "http://localhost:3001/send",
+                    f"{settings.whatsapp_url}/send",
                     json={"phone": self.whatsapp_to, "message": self.whatsapp_message},
                 )
                 data = resp.json()

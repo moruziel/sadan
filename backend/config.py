@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./sadan.db"
     ngrok_host: str = ""  # set before demo, e.g. "abc123.ngrok-free.app"
     test_call_number: str = ""  # מספר קבוע לבדיקות שיחה אוטומטיות (test-system.ps1)
+    whatsapp_url: str = "http://localhost:3001"  # in Docker: http://whatsapp:3001
 
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),

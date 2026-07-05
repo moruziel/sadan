@@ -25,6 +25,8 @@ services:
       dockerfile: deploy/backend.Dockerfile
     env_file:
       - /opt/sadan/secrets/.env
+    environment:
+      - WHATSAPP_URL=http://whatsapp:3001
     volumes:
       - hf_cache:/data/hf_cache
       - /opt/sadan/secrets/vonage_private.key:/app/vonage_private.key:ro

@@ -137,10 +137,10 @@ def _print_status():
     # WhatsApp server
     try:
         import urllib.request
-        urllib.request.urlopen("http://localhost:3001/status", timeout=2)
-        print("  [OK] WhatsApp server    — active (port 3001)")
+        urllib.request.urlopen(f"{settings.whatsapp_url}/status", timeout=2)
+        print(f"  [OK] WhatsApp server    — active ({settings.whatsapp_url})")
     except Exception:
-        print("  [--] WhatsApp server    — not running (port 3001)")
+        print(f"  [--] WhatsApp server    — not running ({settings.whatsapp_url})")
 
     print("=" * W)
     print("  Frontend : http://localhost:5173")

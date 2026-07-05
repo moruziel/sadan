@@ -363,7 +363,7 @@ async def send_voice_note(req: VoiceNoteRequest):
         import httpx
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
-                "http://localhost:3001/send-voice",
+                f"{settings.whatsapp_url}/send-voice",
                 json={"phone": req.to, "audio_base64": audio_b64},
             )
             resp.raise_for_status()
