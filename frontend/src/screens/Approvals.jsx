@@ -68,9 +68,16 @@ export default function Approvals() {
     })
   }, [parties, selected, goGoTriggered, approved, total, allBlockersDone, selectedParty])
 
-  // RULES-001: אחרי 16:00 — פקח רטג לא זמין
+  // RULES-001: אחרי 16:00 — פקח רטג לא זמין.
+  // ניתן לביטול מפאנל הדמו (Ctrl+Shift+→) כדי שדמו אחה"צ לא ייתקע על החוק.
+  const [rtgRuleVersion, setRtgRuleVersion] = useState(0)
+  useEffect(() => {
+    const onChange = () => setRtgRuleVersion(v => v + 1)
+    window.addEventListener('sadan:rtg_rule_changed', onChange)
+    return () => window.removeEventListener('sadan:rtg_rule_changed', onChange)
+  }, [])
   const hour = new Date().getHours()
-  const rtgUnavailable = hour >= 16
+  const rtgUnavailable = hour >= 16 && localStorage.getItem('sadan_ignore_rtg_hours') !== 'true'
 
   useEffect(() => () => clearInterval(pollRef.current), [])
 
@@ -218,6 +225,14 @@ export default function Approvals() {
             <div className="text-8xl font-black text-green-300" style={{ textShadow: '0 0 60px #22c55e' }}>GO</div>
             <div className="text-white text-2xl font-bold">מאושר לביצוע</div>
             <div className="text-green-300 text-sm">תרגיל איגוף מדרום — שטח 309ה — 05.05.2026</div>
+            {/* Savings framing — the one number the audience takes home */}
+            <div className="flex items-center justify-center gap-6 pt-2 text-green-200 text-sm font-bold">
+              <span>{total} גורמי תיאום</span>
+              <span className="text-green-500">•</span>
+              <span>תיק תרגיל מלא</span>
+              <span className="text-green-500">•</span>
+              <span>בפגישה אחת</span>
+            </div>
             <div className="text-green-500 text-xs">לחץ לסגירה</div>
           </div>
         </div>

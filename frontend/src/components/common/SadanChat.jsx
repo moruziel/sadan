@@ -1073,6 +1073,11 @@ export default function SadanChat({ autoOpen = false, visible = true, currentScr
       ws.onopen = () => {
         setConnected(true)
         setListening(true)
+        // Audience mode: PTT-by-default flag from DemoControlPanel
+        if (localStorage.getItem('sadan_ptt_default') === 'true') {
+          setPttMode(true)
+          pttModeRef.current = true
+        }
         // Notify any screen listening for voice connection status (e.g. Login)
         window.dispatchEvent(new CustomEvent('sadan:voice_status', { detail: { status: 'connected' } }))
 

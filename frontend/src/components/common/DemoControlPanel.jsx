@@ -45,6 +45,23 @@ function fillQuestionnaireDefaults() {
 
 export default function DemoControlPanel() {
   const [open, setOpen] = useState(false)
+  const [pttDefault, setPttDefault] = useState(() => localStorage.getItem('sadan_ptt_default') === 'true')
+  const [ignoreRtgHours, setIgnoreRtgHours] = useState(() => localStorage.getItem('sadan_ignore_rtg_hours') === 'true')
+
+  function togglePttDefault() {
+    const next = !pttDefault
+    setPttDefault(next)
+    localStorage.setItem('sadan_ptt_default', String(next))
+    // Apply immediately to an active voice session too
+    window.dispatchEvent(new CustomEvent('sadan:ptt_mode', { detail: { enabled: next } }))
+  }
+
+  function toggleIgnoreRtgHours() {
+    const next = !ignoreRtgHours
+    setIgnoreRtgHours(next)
+    localStorage.setItem('sadan_ignore_rtg_hours', String(next))
+    window.dispatchEvent(new CustomEvent('sadan:rtg_rule_changed'))
+  }
 
   useEffect(() => {
     function onKeyDown(e) {
@@ -102,8 +119,24 @@ export default function DemoControlPanel() {
 
       <div style={{ color: '#6b7280', fontSize: '10px', marginBottom: '6px' }}>בוחן</div>
       <button onClick={() => localStorage.removeItem('sadan_quiz_state')}
-        style={{ width: '100%', fontSize: '11px', padding: '6px', borderRadius: '6px', border: '1px solid #374151', background: '#111827', color: '#e5e7eb', cursor: 'pointer' }}>
+        style={{ width: '100%', fontSize: '11px', padding: '6px', borderRadius: '6px', border: '1px solid #374151', background: '#111827', color: '#e5e7eb', cursor: 'pointer', marginBottom: '10px' }}>
         איפוס תשובות בוחן
+      </button>
+
+      <div style={{ color: '#6b7280', fontSize: '10px', marginBottom: '6px' }}>מצב קהל</div>
+      <button onClick={togglePttDefault}
+        style={{ width: '100%', fontSize: '11px', padding: '6px', borderRadius: '6px', cursor: 'pointer', marginBottom: '4px',
+          border: pttDefault ? '1px solid #eab308' : '1px solid #374151',
+          background: pttDefault ? 'rgba(234,179,8,0.15)' : '#111827',
+          color: pttDefault ? '#eab308' : '#e5e7eb' }}>
+        🎙️ PTT (לחץ-לדבר) {pttDefault ? '— פעיל' : '— כבוי'}
+      </button>
+      <button onClick={toggleIgnoreRtgHours}
+        style={{ width: '100%', fontSize: '11px', padding: '6px', borderRadius: '6px', cursor: 'pointer',
+          border: ignoreRtgHours ? '1px solid #eab308' : '1px solid #374151',
+          background: ignoreRtgHours ? 'rgba(234,179,8,0.15)' : '#111827',
+          color: ignoreRtgHours ? '#eab308' : '#e5e7eb' }}>
+        ⏰ בטל חוק רטג 16:00 {ignoreRtgHours ? '— מבוטל' : '— פעיל'}
       </button>
 
       <div style={{ color: '#4b5563', fontSize: '9px', marginTop: '10px', textAlign: 'center' }}>Ctrl+Shift+→ לסגירה/פתיחה</div>

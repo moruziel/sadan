@@ -130,16 +130,17 @@ export default function VoiceStatusOrb({ visible = true }) {
         )}
       </button>
 
-      {/* Label below the orb */}
+      {/* Label below the orb — real mic state so the user knows when SADAN
+          actually hears them ('speaking' covers the post-speech mute window) */}
       <span style={{
-        fontSize: '9px',
-        fontWeight: '600',
+        fontSize: '10px',
+        fontWeight: '700',
         letterSpacing: '0.04em',
         color: isConnected ? (voiceState === 'speaking' ? '#c6953b' : '#22c55e') : 'rgba(156,163,175,0.8)',
         whiteSpace: 'nowrap',
         userSelect: 'none',
       }}>
-        {isConnected ? 'נתק שיחה' : 'סדן'}
+        {voiceState === 'speaking' ? 'סדן מדבר' : voiceState === 'listening' ? '🎙️ מקשיב' : 'סדן'}
       </span>
 
       </div>

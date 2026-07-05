@@ -373,7 +373,10 @@ export default function Login() {
             <div style={{ color: '#c6953b', fontSize: 12, fontWeight: 500, marginTop: 4, letterSpacing: '0.04em' }}>
               מערכת תכנון ותיאום אימונים
             </div>
-            <div style={{ color: '#374151', fontSize: 10, marginTop: 2 }}>גרסה 1.0 — סודי</div>
+            <div style={{ color: '#9ca3af', fontSize: 12, marginTop: 8, fontWeight: 500 }}>
+              מתכנון של שבועות — לתיק מאושר בדקות
+            </div>
+            <div style={{ color: '#374151', fontSize: 10, marginTop: 4 }}>גרסה 1.0 — סודי</div>
           </div>
         </div>
 
