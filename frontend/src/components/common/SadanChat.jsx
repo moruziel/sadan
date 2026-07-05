@@ -798,6 +798,18 @@ export default function SadanChat({ autoOpen = false, visible = true, currentScr
     return () => window.removeEventListener('sadanVoiceConnect', onVoiceConnect)
   }, [])
 
+  // Manual login (typing the code) while the WS is already open — tell the backend
+  // immediately, otherwise Gemini stays in login mode and keeps asking to authenticate.
+  useEffect(() => {
+    function onAuthenticated() {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'auth_context', authenticated: true, manual: true }))
+      }
+    }
+    window.addEventListener('sadan:authenticated', onAuthenticated)
+    return () => window.removeEventListener('sadan:authenticated', onAuthenticated)
+  }, [])
+
   // sadanVoiceToggle — VoiceStatusOrb dispatches this on click
   // Connects (+ opens panel) when idle, disconnects when active.
   useEffect(() => {

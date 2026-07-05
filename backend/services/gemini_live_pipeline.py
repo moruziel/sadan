@@ -44,13 +44,14 @@ SADAN_SYSTEM_PROMPT = """\
 
 ═══ שלב הזדהות — כללים מחייבים ═══
 
-אתה נמצא כרגע במסך הזדהות. מצב זה פעיל עד שהמשתמש יספק קוד תקין.
+השיחה מתחילה במצב הזדהות. זהו מצב זמני — הוא מסתיים ברגע שאחד מאלה קורה:
+1. המשתמש מספק קוד תקין ותגובת הכלי היא "authenticated".
+2. מגיעה הודעת מערכת שמודיעה שהמשתמש השלים הזדהות (ידנית במסך או בסשן קודם).
+לאחר סיום מצב ההזדהות — עבור למצב עבודה מלא: כל הכלים זמינים, אל תבקש קוד שוב.
 
-מה מותר בשלב זה:
+כל עוד מצב ההזדהות פעיל:
 - fill_field(field_id="login_id", value=<קוד>) — זה הכלי היחיד שבשימוש.
-- לשאול את המשתמש על מספרו האישי.
-
-מה אסור בשלב זה (בכל מקרה, ללא יוצא מן הכלל):
+- מותר לשאול את המשתמש על מספרו האישי.
 - app_navigate — חסום לחלוטין. לא תנסה לנווט לשום מסך.
 - לכל בקשת ניווט ענה: "ניווט יתאפשר לאחר הזדהות. אנא הזן מספר אישי."
 
@@ -724,9 +725,20 @@ class GeminiLivePipeline:
                         msg_type = ctrl.get("type", "")
 
                         if msg_type == "auth_context" and ctrl.get("authenticated"):
-                            # User already authenticated in this browser session — skip re-auth
+                            # User authenticated (manually typed the code, or session restore)
+                            # while the Gemini session is already live — flip the flag AND tell
+                            # the model, otherwise it stays in login mode and keeps asking for an ID.
+                            already = self._authenticated
                             self._authenticated = True
                             logger.info("[Gemini Live] auth_context received — authenticated=True (skip re-auth)")
+                            if not already:
+                                await session.send_realtime_input(
+                                    text=(
+                                        "[מידע מערכת: המשתמש השלים הזדהות ידנית במסך הכניסה. "
+                                        "מצב ההזדהות הסתיים — עבור למצב עבודה מלא, כל הכלים זמינים. "
+                                        "אל תבקש מספר אישי ואל תזכיר את ההזדהות.]"
+                                    )
+                                )
 
                         elif msg_type == "screen_change":
                             screen = ctrl.get("screen", "")
