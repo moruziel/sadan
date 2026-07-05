@@ -47,6 +47,12 @@ function ManualLoginForm({ onBack }) {
     e?.preventDefault()
     if (code === VALID_CODE) {
       setLoading(true)
+      // Sync auth into the voice layer — same as the voice-path doLogin().
+      // Without this, an open Gemini session stays in login mode and keeps
+      // asking the user to authenticate (the bug Mor hit on mobile).
+      sessionStorage.setItem('sadan_authenticated', 'true')
+      sessionStorage.setItem('sadan_skip_greeting', 'true')
+      window.dispatchEvent(new CustomEvent('sadan:authenticated'))
       setTimeout(() => navigate('/field-selection'), 800)
     } else {
       setError(true)
