@@ -41,6 +41,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/whatsapp.Dockerfile
+    shm_size: '256m'
     volumes:
       - wa_auth:/app/.wwebjs_auth
     restart: unless-stopped
