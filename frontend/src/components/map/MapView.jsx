@@ -3,6 +3,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { AREA_309 } from '../../data/mockData'
 import { addFiringCones, removeFiringCones, setFiringConesVisibility } from './FiringConesLayer.js'
+import sadanContext from '../../services/sadanContext'
 
 const INITIAL_CENTER = [35.245, 31.82]
 const INITIAL_ZOOM   = 12
@@ -85,6 +86,15 @@ export default function MapView({ layers, toggleLayer = () => {}, onShowDiagram 
   const [is3D, setIs3D]           = useState(false)
   const is3DRef                   = useRef(false)   // stale-closure-safe ref
   const [showCones, setShowCones] = useState(false)
+
+  // Report map view state to SADAN (voice context) — patch, not setScreen:
+  // the owning screen (Area) sets the screen; this adds map-specific fields.
+  useEffect(() => {
+    sadanContext.patch({
+      'תצוגת מפה': is3D ? 'תלת-מימד' : 'דו-מימד',
+      'קונוסי ירי': showCones ? 'מוצגים' : '',
+    })
+  }, [is3D, showCones])
   // גליון אחד מאחד את כל בקרות התצוגה — סגור כברירת מחדל. אותם אירועי קול/טקסט
   // (sadan:toggle_legend / sadan:toggle_layers_panel) ממשיכים לעבוד זהה — רק נקודת
   // הכניסה הוויזואלית התאחדה.
