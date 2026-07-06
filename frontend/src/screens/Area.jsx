@@ -276,6 +276,12 @@ export default function Area() {
   const [showDiagram, setShowDiagram]     = useState(false)
   const [onlyAvailable, setOnlyAvailable] = useState(false)
   const [layersOpen, setLayersOpen]       = useState(false)  // closed by default — decluttered map
+  const [sheetOpen, setSheetOpen]         = useState(true)   // mobile bottom sheet — open on entry (shows field list)
+
+  // Selecting a field on the map opens the sheet so its info is visible
+  useEffect(() => {
+    if (selectedField) setSheetOpen(true)
+  }, [selectedField])
 
   // Report map-screen state to SADAN (voice context)
   useEffect(() => {
@@ -357,14 +363,30 @@ export default function Area() {
   }
 
   // ── Region/free/urgent mode ────────────────────────────
+  // Mobile: the map owns the whole screen; the white panel becomes a bottom
+  // sheet (collapsed to a handle, expands on tap). Desktop (md+): unchanged
+  // sidebar layout.
   return (
     <div className="flex flex-col h-dvh bg-demo-bg" dir="rtl">
       <Header currentPath="/area" />
       {showDiagram && <DataSourcesDiagram onClose={() => setShowDiagram(false)} />}
-      <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+      <div className="flex flex-col md:flex-row flex-1 overflow-hidden relative">
 
-        {/* פאנל ימין — full-width stacked on mobile, fixed sidebar on desktop */}
-        <div className="w-full md:w-80 max-h-[45vh] md:max-h-none bg-white text-gray-800 flex flex-col overflow-hidden shadow-2xl">
+        {/* פאנל — sidebar בדסקטופ, bottom sheet במובייל */}
+        <div className={`bg-white text-gray-800 flex flex-col overflow-hidden shadow-2xl
+          fixed bottom-0 left-0 right-0 z-30 rounded-t-2xl transition-all duration-300
+          ${sheetOpen ? 'max-h-[62vh]' : 'max-h-[44px]'}
+          md:static md:w-80 md:max-h-none md:rounded-none md:z-auto`}>
+          {/* Mobile handle — tap to expand/collapse the sheet */}
+          <button
+            onClick={() => setSheetOpen(v => !v)}
+            className="md:hidden flex items-center justify-between px-4 h-[44px] flex-shrink-0 border-b border-gray-200 bg-white"
+          >
+            <span className="text-sm font-bold text-gray-800 truncate">
+              {selectedField ? selectedField.name : 'רשימת שטחים בגזרה'}
+            </span>
+            <span className="text-demo-gold text-lg leading-none">{sheetOpen ? '▼' : '▲'}</span>
+          </button>
           {selectedField ? (
             <FieldInfoPanel
               field={selectedField}
@@ -381,7 +403,7 @@ export default function Area() {
           )}
         </div>
 
-        {/* מפת גזרה */}
+        {/* מפת גזרה — במובייל תופסת את כל המסך (הפאנל צף מעליה) */}
         <div className="flex-1 relative min-h-0">
           <RegionMapView
             mode={mode}
@@ -389,33 +411,34 @@ export default function Area() {
             selectedFieldId={selectedField?.id}
             onFieldSelect={field => setSelectedField(field)}
           />
-          {/* שכבות מידע + מקורות — שמאל, מתחת ל-NavigationControl */}
+          {/* שכבות מידע + מקורות — שמאל, מתחת ל-NavigationControl.
+              במובייל: אייקונים בלבד (לא מסתירים מפה) */}
           <div className="absolute top-28 left-3 z-10 flex flex-col gap-1.5">
             <button
               onClick={() => setShowDiagram(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-md bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm hover:text-demo-gold hover:border-demo-gold/40"
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-md bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm hover:text-demo-gold hover:border-demo-gold/40"
             >
               <Info size={13} />
               מקורות
             </button>
             <button
               onClick={() => setLayersOpen(v => !v)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-md bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm hover:text-demo-gold hover:border-demo-gold/40"
+              className="flex items-center gap-2 px-2.5 md:px-3 py-2 md:py-1.5 rounded-lg text-sm md:text-xs font-semibold transition-all shadow-md bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm hover:text-demo-gold hover:border-demo-gold/40"
             >
-              <Layers size={13} />
-              {layersOpen ? '▾' : '▸'} שכבות מידע
+              <Layers size={15} />
+              <span className="hidden md:inline">{layersOpen ? '▾' : '▸'} שכבות מידע</span>
             </button>
             {layersOpen && LAYER_OPTIONS.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
                 onClick={() => toggleLayer(key)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-md
+                className={`flex items-center gap-2 px-2.5 md:px-3 py-2 md:py-1.5 rounded-lg text-sm md:text-xs font-semibold transition-all shadow-md
                   ${layers[key]
                     ? 'bg-demo-gold text-black'
                     : 'bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm'
                   }`}
               >
-                <Icon size={13} />
+                <Icon size={15} />
                 {label}
               </button>
             ))}

@@ -5,7 +5,7 @@ sadan-demo.duckdns.org {
 
 	basicauth @protected {
 		mor $2b$14$yk5vt8LWsGhpXZCJPlGZrO3Lgr/QztPe9jg2DJaqI6W3eDKoNK8GK
-		brumer $2b$14$ga43n3jHJW5dEAlUhCsqluDBUYj..IkFo1p1WoWcicuRzVslKytDS
+		bromer $2b$14$ga43n3jHJW5dEAlUhCsqluDBUYj..IkFo1p1WoWcicuRzVslKytDS
 		raz $2b$14$eWbOP6lAt7KSI2qXQQBMKOI.tU7DTTBXKoJYs5YruRgm1jIkiwwlS
 	}
 

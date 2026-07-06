@@ -147,8 +147,8 @@ export default function AreaCalendar() {
 
       <div className="flex flex-1 overflow-hidden gap-0">
 
-        {/* פאנל שמאל — שדות */}
-        <div className="w-36 bg-white border-l border-gray-200 flex flex-col">
+        {/* פאנל שמאל — שדות. במובייל מוסתר — העמודה הדביקה בטבלה כבר מציגה את השמות */}
+        <div className="hidden md:flex w-36 bg-white border-l border-gray-200 flex-col">
           <div className="px-3 py-3 border-b border-gray-200">
             <div className="text-gray-900 font-bold text-sm">שטחי אש</div>
             <div className="text-gray-500 text-xs">אזור 251</div>
