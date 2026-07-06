@@ -1,5 +1,7 @@
 sadan-demo.duckdns.org {
-	@protected not path /api/voice/* /health
+	# /gemini-voice exempt too: mobile browsers don't attach cached basic-auth
+	# credentials to WebSocket upgrades, so voice would never connect on phones.
+	@protected not path /api/voice/* /health /gemini-voice*
 
 	basicauth @protected {
 		mor $2b$14$yk5vt8LWsGhpXZCJPlGZrO3Lgr/QztPe9jg2DJaqI6W3eDKoNK8GK
