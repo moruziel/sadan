@@ -811,19 +811,23 @@ export default function SadanChat({ autoOpen = false, visible = true, currentScr
     return () => window.removeEventListener('sadan:authenticated', onAuthenticated)
   }, [])
 
-  // sadanVoiceToggle — VoiceStatusOrb dispatches this on click
-  // Connects (+ opens panel) when idle, disconnects when active.
+  // sadanVoiceToggle — VoiceStatusOrb dispatches this on click.
+  // Tapping the orb OPENS the panel (never silently disconnects — that was a
+  // UX trap). Disconnect is an explicit button inside the panel.
   useEffect(() => {
     function onVoiceToggle() {
-      if (connectedRef.current) {
-        disconnectVoiceRef.current?.()
-      } else {
-        setOpen(true)
-        connectVoiceRef.current?.()
-      }
+      setOpen(true)
+      if (!connectedRef.current) connectVoiceRef.current?.()
     }
     window.addEventListener('sadanVoiceToggle', onVoiceToggle)
     return () => window.removeEventListener('sadanVoiceToggle', onVoiceToggle)
+  }, [])
+
+  // sadan:logout — Header exit button ends the voice session too
+  useEffect(() => {
+    function onLogout() { disconnectVoiceRef.current?.() }
+    window.addEventListener('sadan:logout', onLogout)
+    return () => window.removeEventListener('sadan:logout', onLogout)
   }, [])
 
   // Broadcast voice state → VoiceStatusOrb listens to this
@@ -898,7 +902,14 @@ export default function SadanChat({ autoOpen = false, visible = true, currentScr
     // Verbal disconnect — user says "תנתק" / "אמשיך לבד" etc.
     // Gemini will respond with a goodbye naturally; we disconnect after ~4s to let it finish.
     if (role === 'user' && final) {
-      if (/תנתק|ניתוק|אמשיך.{0,4}לבד|תודה.{0,8}(לא.{0,4}צריך|סיימנו|מספיק)|לא.{0,4}צריך.{0,8}עזרה/i.test(text)) {
+      // Full exit — leave the demo entirely: voice off + back to login
+      if (/צא.{0,6}(מהמערכת|החוצה)|סיים.{0,6}(דמו|את הדמו)|סגור.{0,6}(דמו|מערכת|את המערכת)/i.test(text)) {
+        setTimeout(() => {
+          disconnectVoiceRef.current?.()
+          sessionStorage.removeItem('sadan_authenticated')
+          window.dispatchEvent(new CustomEvent('sadan:navigate', { detail: { path: '/' } }))
+        }, 4000)
+      } else if (/תנתק|ניתוק|אמשיך.{0,4}לבד|תודה.{0,8}(לא.{0,4}צריך|סיימנו|מספיק)|לא.{0,4}צריך.{0,8}עזרה/i.test(text)) {
         setTimeout(() => disconnectVoiceRef.current?.(), 4500)
       }
     }
@@ -1313,10 +1324,11 @@ export default function SadanChat({ autoOpen = false, visible = true, currentScr
 
   return (
     <>
-      {/* ── כפתור פתיחה — 💬 קטן, שקט, פינה שמאל תחתון ──── */}
+      {/* ── כפתור פתיחה — 💬 קטן, שקט, פינה שמאל תחתון.
+             במובייל מוסתר — הפאנל נפתח מהעיגול הקולי (אלמנט צף אחד בלבד) ──── */}
       <button
         onClick={() => setOpen(true)}
-        className={`fixed bottom-6 left-6 z-40 w-10 h-10 rounded-full flex items-center justify-center
+        className={`hidden md:flex fixed bottom-6 left-6 z-40 w-10 h-10 rounded-full items-center justify-center
                    bg-[#111827] border border-[#c6953b]/30 text-[#c6953b]
                    hover:bg-[#c6953b]/15 hover:border-[#c6953b]/60 hover:scale-110
                    shadow-lg transition-all
@@ -1358,13 +1370,26 @@ export default function SadanChat({ autoOpen = false, visible = true, currentScr
                   </div>
                 </div>
               </div>
-              <button
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-1 text-gray-400 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/10 text-xs"
-              >
-                <ChevronLeft size={15} />
-                סגור
-              </button>
+              <div className="flex items-center gap-1.5">
+                {/* Explicit mic control — the clear answer to "how do I mute SADAN" */}
+                <button
+                  onClick={toggleVoice}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors border
+                    ${connected
+                      ? 'text-red-400 border-red-500/40 bg-red-900/20 hover:bg-red-900/40'
+                      : 'text-demo-gold border-[#c6953b]/40 bg-[#c6953b]/10 hover:bg-[#c6953b]/25'
+                    }`}
+                >
+                  🎙️ {connected ? 'נתק מיקרופון' : 'התחבר'}
+                </button>
+                <button
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-1 text-gray-400 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/10 text-xs"
+                >
+                  <ChevronLeft size={15} />
+                  סגור
+                </button>
+              </div>
             </div>
 
             {/* הודעות */}

@@ -86,12 +86,14 @@ export default function VoiceStatusOrb({ visible = true }) {
     <>
       <style>{KEYFRAMES}</style>
 
-      <div style={{ position: 'fixed', top: '10px', right: '12px', zIndex: 45, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+      {/* Mobile: orb sits inside the header strip (Header/ProgressBar reserve
+          pr-14/16 for it) with no label. Desktop: orb + state label below. */}
+      <div className="fixed top-1 md:top-2.5 right-3 z-[45] flex flex-col items-center gap-1">
 
       <button
         onClick={handleClick}
         style={{ ...baseStyle, ...stateStyle, position: 'relative', top: 'auto', right: 'auto', zIndex: 'auto' }}
-        title={isConnected ? 'נתק שיחה קולית' : 'פתח שיחה עם סדן'}
+        title={isConnected ? 'פתח את פאנל סדן' : 'פתח שיחה עם סדן'}
       >
         {/* ── idle: 3 breathing blue dots ── */}
         {voiceState === 'idle' && (
@@ -132,7 +134,7 @@ export default function VoiceStatusOrb({ visible = true }) {
 
       {/* Label below the orb — real mic state so the user knows when SADAN
           actually hears them ('speaking' covers the post-speech mute window) */}
-      <span style={{
+      <span className="hidden md:inline" style={{
         fontSize: '10px',
         fontWeight: '700',
         letterSpacing: '0.04em',

@@ -7,8 +7,9 @@ export default function Header({ currentPath, userName = 'רס"ן כהן' }) {
 
   return (
     <header className="bg-demo-bg border-b border-demo-border">
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-2" dir="rtl">
+      {/* Top bar — pr-16 keeps the fixed VoiceStatusOrb (top-right) from
+          overlapping the back/user/logout cluster */}
+      <div className="flex items-center justify-between pl-4 pr-16 py-2" dir="rtl">
 
         {/* ימין: חזרה + user + logout */}
         <div className="flex items-center gap-1 md:gap-2 min-w-0">
@@ -35,9 +36,13 @@ export default function Header({ currentPath, userName = 'רס"ן כהן' }) {
 
           <div className="hidden md:block w-px h-5 bg-demo-border" />
 
-          {/* logout */}
+          {/* logout — ends the whole demo session: voice off, auth cleared, back to login */}
           <button
-            onClick={() => navigate('/')}
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('sadan:logout'))
+              sessionStorage.removeItem('sadan_authenticated')
+              navigate('/')
+            }}
             className="flex items-center gap-1.5 text-gray-400 hover:text-demo-danger text-sm transition-colors px-2 py-1 rounded-lg hover:bg-demo-danger/10 flex-shrink-0"
           >
             <LogOut size={14} />

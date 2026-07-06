@@ -25,7 +25,8 @@ export default function ProgressBar({ currentPath }) {
   }, [currentPath])
 
   return (
-    <div className="flex flex-row-reverse items-center justify-start md:justify-center gap-0 px-4 py-2 bg-demo-surface border-b border-demo-border overflow-x-auto">
+    // pr-14 on mobile: clears the fixed VoiceStatusOrb column at the top-right
+    <div className="flex flex-row-reverse items-center justify-start md:justify-center gap-0 pl-4 pr-14 md:px-4 py-2 bg-demo-surface border-b border-demo-border overflow-x-auto">
       {STEPS.map((step, idx) => {
         const done   = idx < currentIdx
         const active = idx === currentIdx

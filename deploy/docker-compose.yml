@@ -24,7 +24,9 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80"]
+      # busybox wget fails on Caddy's 308 http->https redirect; a TCP check is
+      # the reliable liveness signal here
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 80 || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
