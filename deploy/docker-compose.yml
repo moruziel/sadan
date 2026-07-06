@@ -1,8 +1,18 @@
+# Log rotation for every service — without this, docker json logs grow unbounded
+# and fill the 30GB disk within weeks.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   web:
     build:
       context: ..
       dockerfile: deploy/web.Dockerfile
+    logging: *default-logging
+    mem_limit: 512m
     ports:
       - "80:80"
       - "443:443"
@@ -23,6 +33,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/backend.Dockerfile
+    logging: *default-logging
+    mem_limit: 2g
     env_file:
       - /opt/sadan/secrets/.env
     environment:
@@ -43,6 +55,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/whatsapp.Dockerfile
+    logging: *default-logging
+    mem_limit: 1500m
     shm_size: '256m'
     volumes:
       - wa_auth:/app/.wwebjs_auth

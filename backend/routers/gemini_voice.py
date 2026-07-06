@@ -110,13 +110,30 @@ async def get_test_page():
     return HTMLResponse(_HTML_FILE.read_text(encoding="utf-8"))
 
 
+# Concurrent-session cap: each session opens a paid Gemini Live connection and
+# holds memory. The endpoint is public (basic-auth exempt for mobile WS), so an
+# unbounded count is both a cost and a stability risk on the 4GB demo VM.
+_MAX_SESSIONS = 3
+_active_sessions = 0
+
+
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """In-app voice chat — uses SADAN advisor prompt (not approval call prompts)."""
+    global _active_sessions
+    if _active_sessions >= _MAX_SESSIONS:
+        logger.warning(f"[Gemini Voice] Rejecting connection — {_active_sessions} active sessions (max {_MAX_SESSIONS})")
+        await websocket.close(code=1013)  # 1013 = Try Again Later
+        return
+
     await websocket.accept()
-    logger.info("[Gemini Voice] Browser connected — advisor session")
-    # Pass the base prompt only — pipeline.run() adds the opening/override
-    # dynamically based on auth state detected from the browser's auth_context message.
-    pipeline = GeminiLivePipeline(websocket, system_prompt=SADAN_ADVISOR_PROMPT)
-    await pipeline.run()
-    logger.info("[Gemini Voice] Browser session ended")
+    _active_sessions += 1
+    logger.info(f"[Gemini Voice] Browser connected — advisor session ({_active_sessions}/{_MAX_SESSIONS})")
+    try:
+        # Pass the base prompt only — pipeline.run() adds the opening/override
+        # dynamically based on auth state detected from the browser's auth_context message.
+        pipeline = GeminiLivePipeline(websocket, system_prompt=SADAN_ADVISOR_PROMPT)
+        await pipeline.run()
+    finally:
+        _active_sessions -= 1
+        logger.info(f"[Gemini Voice] Browser session ended ({_active_sessions}/{_MAX_SESSIONS})")
