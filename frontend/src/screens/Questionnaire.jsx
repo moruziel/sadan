@@ -90,6 +90,11 @@ export default function Questionnaire() {
       const { field_id, value } = e.detail ?? {}
       if (!field_id) return
       if (field_id === 'readiness') { set('readiness', value); flash('readiness') }
+      else if (field_id === 'firingCond') {
+        // Voice: "תנאי ירי רטוב" — normalize to the exact select values
+        const v = /רטוב/.test(value) ? 'רטוב' : /שניהם/.test(value) ? 'שניהם' : 'יבש'
+        set('firingCond', v); flash('firingCond')
+      }
       else if (['topic','objective','ammo','date','forceSize','composition'].includes(field_id)) {
         set(field_id, value); flash(field_id)
       }

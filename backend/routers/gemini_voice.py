@@ -34,7 +34,7 @@ SADAN_ADVISOR_PROMPT = """\
 - תצוגת שטח (Area) — שכבות מפה, כוחות שכנים, גבולות, מידע על השטח.
 - שאלון תרגיל — הגדרת מטרת האימון, רמת כשירות, אמל"ח, תאריכים וכוח.
   כשמשתמש מבקש למלא שדה בשאלון — השתמש ב-fill_field עם section='' ו-field_id מתוך:
-  readiness (aleph/bet/gimel/dalet) | objective | topic | ammo | date (dd/mm/yyyy) | forceSize | composition.
+  readiness (aleph/bet/gimel/dalet) | firingCond ('יבש'/'רטוב') | objective | topic | ammo | date (dd/mm/yyyy) | forceSize | composition.
 - מתווים — 3 תוכניות עם ציון, הסבר ומפה מוקטנת. המפקד בוחר מתווה.
 - תיק תרגיל — 7 פרקים: מטרות, לוגיסטיקה, בטיחות, תקשורת, לוח זמנים, כוחות שכנים, הערות.
 - בוחן — 5 שאלות אמריקאיות מהתיק. סף מעבר 4/5.
