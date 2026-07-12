@@ -16,6 +16,7 @@ import Quiz           from './screens/Quiz'
 import Approvals      from './screens/Approvals'
 import DemoChecklist  from './screens/DemoChecklist'
 import Simulation     from './screens/Simulation'
+import Wall           from './screens/Wall'
 
 export default function App() {
   // המסך לא יחשיך/יינעל כל עוד האפליקציה פתוחה — לא רק תוך כדי שיחה קולית.
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/approvals"     element={<Approvals />} />
           <Route path="/demo-check"    element={<DemoChecklist />} />
           <Route path="/simulation"    element={<Simulation />} />
+          <Route path="/wall"          element={<Wall />} />
           <Route path="*"              element={<Navigate to="/" replace />} />
         </Routes>
       </div>
@@ -55,7 +57,7 @@ export default function App() {
 
 // On these paths the chat panel/button is hidden but component stays mounted (WS alive)
 // Login has its own mic UI. /demo-check has no voice.
-const NO_CHAT_PATHS = new Set(['/', '/demo-check'])
+const NO_CHAT_PATHS = new Set(['/', '/demo-check', '/wall'])
 
 function SadanChatWrapper() {
   const { pathname } = useLocation()

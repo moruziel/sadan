@@ -38,6 +38,7 @@ from backend.agents.approval_tracker_agent import ApprovalTrackerAgent
 from backend.routers import voice as voice_router
 from backend.routers import gemini_voice as gemini_voice_router
 from backend.routers import speaker as speaker_router
+from backend.routers import wall as wall_router
 
 # --- אתחול האפליקציה ---
 app = FastAPI(
@@ -152,6 +153,7 @@ def _print_status():
 app.include_router(voice_router.router)
 app.include_router(gemini_voice_router.router)
 app.include_router(speaker_router.router)
+app.include_router(wall_router.router)
 
 
 # ─────────────────────────────────────────────

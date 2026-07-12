@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { MessageSquare, ChevronLeft, Volume2, Send, Loader } from 'lucide-react'
 import { sendWhatsAppMedia, sendWhatsApp } from '../../api/whatsapp'
 import { CONTACTS, buildSisoAirforceMessage } from '../../data/contacts'
-import sadanContext from '../../services/sadanContext'
+import sadanContext, { publishToWall } from '../../services/sadanContext'
 
 // Relative to current origin — works identically on localhost (desktop dev)
 // and through the Cloudflare tunnel (phone), both proxied by Vite (vite.config.js).
@@ -899,6 +899,8 @@ export default function SadanChat({ autoOpen = false, visible = true, currentScr
   // Transcript: accumulate partial chunks into a live bubble, finalize on turn_complete.
   // liveTranscript.current[role] = { id, accumulated } | null
   function handleTranscript(role, text, final) {
+    // Mirror finalized lines to the wall display (in-app conversation feed)
+    if (final) publishToWall({ type: 'transcript', role, text })
     // Verbal disconnect — user says "תנתק" / "אמשיך לבד" etc.
     // Gemini will respond with a goodbye naturally; we disconnect after ~4s to let it finish.
     if (role === 'user' && final) {

@@ -10,13 +10,19 @@ export default defineConfig({
     // Quick Cloudflare tunnels get a random *.trycloudflare.com subdomain each run — allow the suffix.
     allowedHosts: ['.trycloudflare.com'],
     proxy: {
+      // wall display websocket — must precede the generic /api rule
+      '/api/wall/ws': {
+        target: 'ws://localhost:8000',
+        ws: true,
+      },
       '/api': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
       '/gemini-voice': {
         target: 'ws://localhost:8000',
         ws: true,
       },
-      '/wa': {
+      // regex key: plain '/wa' would also swallow the /wall display route
+      '^/wa/': {
         target: 'http://localhost:3001',
         rewrite: (path) => path.replace(/^\/wa/, ''),
       },

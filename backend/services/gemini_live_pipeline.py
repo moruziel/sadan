@@ -1470,9 +1470,11 @@ class GeminiVonagePipeline:
 
                     if sc.input_transcription and sc.input_transcription.text:
                         logger.info(f"[Gemini Vonage] 🎤 heard: {repr(sc.input_transcription.text[:80])}")
+                        await self._wall_broadcast("call_transcript", role="them", text=sc.input_transcription.text)
 
                     if sc.output_transcription and sc.output_transcription.text:
                         logger.info(f"[Gemini Vonage] 🔊 said: {repr(sc.output_transcription.text[:80])}")
+                        await self._wall_broadcast("call_transcript", role="sadan", text=sc.output_transcription.text)
 
                     if sc.interrupted:
                         logger.info("[Gemini Vonage] ↩ Barge-in detected")
@@ -1483,6 +1485,14 @@ class GeminiVonagePipeline:
         except Exception as e:
             logger.warning(f"[Gemini Vonage] Receive error: {e}")
             print(f"[DIAG] _receive_audio ERROR after {responses_received} responses: {type(e).__name__}: {e}", flush=True)
+
+    async def _wall_broadcast(self, event_type: str, **fields):
+        """Push a live event to any connected wall displays (non-fatal)."""
+        try:
+            from backend.routers.wall import broadcast
+            await broadcast({"type": event_type, **fields})
+        except Exception:
+            pass
 
     async def _do_send_whatsapp(self):
         """Send exercise details via WhatsApp server (settings.whatsapp_url)."""

@@ -22,7 +22,21 @@ function _notify() {
   _timer = setTimeout(() => {
     const snapshot = get()
     _subscribers.forEach(cb => { try { cb(snapshot) } catch (_) {} })
+    // Wall display (command-center screen) — fire-and-forget, never blocks the app
+    publishToWall({ type: 'context', ...snapshot })
   }, DEBOUNCE_MS)
+}
+
+// One-way publish to the wall event bus. Failures are silent by design:
+// the wall is a passive narrator — if it's down, the demo continues.
+export function publishToWall(event) {
+  try {
+    fetch('/api/wall/event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(event),
+    }).catch(() => {})
+  } catch (_) {}
 }
 
 export function setScreen(screen, state = {}) {
