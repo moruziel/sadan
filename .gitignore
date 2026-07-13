@@ -42,3 +42,7 @@ vonage_private.key
 # WhatsApp auth session
 demo_assets/whatsapp_server/.wwebjs_auth/
 demo_assets/whatsapp_server/.wwebjs_cache/
+
+# E2E artifacts
+tests/e2e/reports/
+tests/e2e/test-results/

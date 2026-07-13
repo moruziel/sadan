@@ -793,7 +793,8 @@ export default function MapView({ layers, toggleLayer = () => {}, onShowDiagram 
 
       {/* ── תצוגת מפה — גליון יחיד מאחד 3D / שכבות מידע / מקרא / מקורות ──
           במקום 4 אשכולות עצמאיים (ר' תוכנית עיצוב UX), נקודת כניסה אחת בשמאל-עליון. */}
-      <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 10, maxWidth: optionsOpen ? '260px' : 'auto' }}>
+      {/* left: 56 clears the MapLibre NavigationControl (top-left, ~44px wide) */}
+      <div style={{ position: 'absolute', top: 12, left: 56, zIndex: 10, maxWidth: optionsOpen ? '260px' : 'auto' }}>
         <button
           onClick={() => setOptionsOpen(v => !v)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-md bg-demo-surface/90 text-gray-300 border border-demo-border backdrop-blur-sm hover:text-demo-gold hover:border-demo-gold/40"

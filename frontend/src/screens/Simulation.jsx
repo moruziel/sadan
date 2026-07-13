@@ -389,7 +389,8 @@ export default function Simulation() {
       dragRotate: true, pitchWithRotate: true, maxPitch: 80,
     })
     mapRef.current = map
-    map.addControl(new maplibregl.NavigationControl(), 'top-left')
+    // top-right: the InfoPanel owns the top-left corner and was covering the zoom buttons
+    map.addControl(new maplibregl.NavigationControl(), 'top-right')
 
     map.on('load', () => {
       // terrain
@@ -993,17 +994,20 @@ export default function Simulation() {
 
   return (
     <div className="flex flex-col h-dvh bg-demo-bg" dir="rtl">
-      {/* top bar */}
-      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2.5 bg-demo-surface border-b border-demo-border z-10">
-        <button onClick={()=>navigate('/exercise')} className="flex items-center gap-1.5 text-gray-400 hover:text-white text-sm transition-colors">
-          <ChevronLeft size={16}/> חזרה לתיק
+      {/* top bar — pr-14 clears the voice orb; PhaseBar is desktop-only (mobile
+          has the bottom progress + HUD) */}
+      <div className="flex-shrink-0 flex items-center gap-2 md:gap-3 pl-4 pr-14 py-2.5 bg-demo-surface border-b border-demo-border z-10">
+        <button onClick={()=>navigate('/exercise')} className="flex items-center gap-1.5 text-gray-400 hover:text-white text-sm transition-colors flex-shrink-0">
+          <ChevronLeft size={16}/> <span className="hidden sm:inline">חזרה לתיק</span>
         </button>
-        <div className="w-px h-5 bg-demo-border"/>
-        <div className="flex items-center gap-2">
-          <Crosshair size={15} className="text-demo-gold"/>
-          <span className="text-white font-bold text-sm">סימולציה טקטית — מחלקה ב׳ | שטח 309ה</span>
+        <div className="w-px h-5 bg-demo-border hidden sm:block"/>
+        <div className="flex items-center gap-2 min-w-0">
+          <Crosshair size={15} className="text-demo-gold flex-shrink-0"/>
+          <span className="text-white font-bold text-sm truncate hidden md:inline">סימולציה טקטית — מחלקה ב׳ | שטח 309ה</span>
+          <span className="text-white font-bold text-sm truncate md:hidden">סימולציה</span>
         </div>
-        <div className="flex-1 min-w-0"><PhaseBar phase={phase} onGoto={gotoPhase}/></div>
+        <div className="flex-1 min-w-0 hidden md:block"><PhaseBar phase={phase} onGoto={gotoPhase}/></div>
+        <div className="flex-1 md:hidden"/>
         <button onClick={toggle3d} title={is3d?'תצוגה דו-מימדית (2D)':'תצוגה תלת-מימדית (3D)'}
           className={`p-1.5 rounded-lg transition-colors ${is3d?'text-demo-gold bg-demo-gold/10':'text-gray-500 hover:text-gray-300'}`}>
           <Layers size={15}/>
@@ -1066,8 +1070,8 @@ export default function Simulation() {
         <p className="text-gray-200 text-sm leading-relaxed flex-1" dir="rtl">{currentData.narration}</p>
       </div>
 
-      {/* controls */}
-      <div className="flex-shrink-0 bg-demo-surface border-t border-demo-border px-5 py-3 flex items-center gap-3">
+      {/* controls — wraps on mobile so nothing gets cut at the edge */}
+      <div className="flex-shrink-0 bg-demo-surface border-t border-demo-border px-3 md:px-5 py-3 flex items-center gap-2 md:gap-3 flex-wrap md:flex-nowrap">
         <button onClick={handleReset} className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-demo-card transition-colors" title="התחל מחדש">
           <RotateCcw size={16}/>
         </button>
