@@ -778,6 +778,25 @@ class GeminiLivePipeline:
 
     # ── Audio I/O ──────────────────────────────────────────────
 
+    async def _send_silent_context(self, session, text: str):
+        """
+        Inject background info into the session WITHOUT provoking a spoken reply.
+
+        send_realtime_input(text=...) is treated as live user input — the model
+        answers it, so SADAN was reading "[מידע מערכת: ...]" out loud. Sending
+        the same text via send_client_content with turn_complete=False appends
+        it to the conversation context and the model simply waits for the next
+        real input.
+        """
+        from google.genai import types
+        try:
+            await session.send_client_content(
+                turns=types.Content(role="user", parts=[types.Part(text=text)]),
+                turn_complete=False,
+            )
+        except Exception as e:
+            logger.warning(f"[Gemini Live] silent context send failed: {e}")
+
     async def _send_audio(self, session):
         """
         Browser → FastAPI → Gemini: forward raw 16 kHz PCM chunks.
@@ -826,12 +845,10 @@ class GeminiLivePipeline:
                             self._authenticated = True
                             logger.info("[Gemini Live] auth_context received — authenticated=True (skip re-auth)")
                             if not already:
-                                await session.send_realtime_input(
-                                    text=(
-                                        "[מידע מערכת: המשתמש השלים הזדהות ידנית במסך הכניסה. "
-                                        "מצב ההזדהות הסתיים — עבור למצב עבודה מלא, כל הכלים זמינים. "
-                                        "אל תבקש מספר אישי ואל תזכיר את ההזדהות.]"
-                                    )
+                                await self._send_silent_context(session,
+                                    "[מידע מערכת: המשתמש השלים הזדהות ידנית במסך הכניסה. "
+                                    "מצב ההזדהות הסתיים — עבור למצב עבודה מלא, כל הכלים זמינים. "
+                                    "אל תבקש מספר אישי ואל תזכיר את ההזדהות.]"
                                 )
 
                         elif msg_type == "screen_change":
@@ -842,15 +859,15 @@ class GeminiLivePipeline:
                             if guide:
                                 text += f" {guide}"
                             text += "]"
-                            await session.send_realtime_input(text=text)
+                            await self._send_silent_context(session, text)
                             logger.info(f"[Gemini Live] screen_change → {screen}")
 
                         elif msg_type == "context_update":
                             screen = ctrl.get("screen", "")
                             state = ctrl.get("state", {}) or {}
                             ctx_line = _format_context(screen, state)
-                            await session.send_realtime_input(
-                                text=f"[מידע מערכת: מצב נוכחי — {ctx_line}]"
+                            await self._send_silent_context(
+                                session, f"[מידע מערכת: מצב נוכחי — {ctx_line}]"
                             )
                             logger.info(f"[Gemini Live] context_update → {ctx_line[:100]}")
 
@@ -1117,9 +1134,10 @@ class GeminiLivePipeline:
                                     # updated after connect). Send an explicit silent override so Gemini
                                     # stops re-asking for the ID / blocking navigation on later screens.
                                     if tool_resp.get("result") == "authenticated":
-                                        await session.send_realtime_input(
-                                            text="[מידע מערכת: הזדהות הושלמה בהצלחה. שלב ההזדהות הסתיים — "
-                                                 "אל תבקש מספר אישי שוב ואל תחסום ניווט במהלך הסשן הזה.]"
+                                        await self._send_silent_context(
+                                            session,
+                                            "[מידע מערכת: הזדהות הושלמה בהצלחה. שלב ההזדהות הסתיים — "
+                                            "אל תבקש מספר אישי שוב ואל תחסום ניווט במהלך הסשן הזה.]"
                                         )
 
                                 # ── Regular field fill (other screens) ───────
