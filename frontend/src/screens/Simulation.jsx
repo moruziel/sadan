@@ -363,6 +363,54 @@ export default function Simulation() {
   const [markerScale,     setMarkerScale]     = useState(1.0)   // 0.4 – 1.6
   const [showNextRoute,   setShowNextRoute]   = useState(false) // highlight next-phase movement lines
   const [opforHighlight,  setOpforHighlight]  = useState(false) // highlight OPFOR positions
+  // ── director camera: overview (default) | follow a unit | enemy POV ──
+  const [cameraMode,      setCameraMode]      = useState({ view: 'overview', unitId: null })
+  const cameraModeRef = useRef(cameraMode)
+  useEffect(() => { cameraModeRef.current = cameraMode }, [cameraMode])
+  const phaseRefForCamera = useRef(0)
+  // ── mobile cinema mode: chrome auto-hides after 5s idle, any touch revives ──
+  const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
+  const [uiVisible, setUiVisible] = useState(true)
+  const [phaseToast, setPhaseToast] = useState(null)   // big center label on phase change
+  const [narrOpen, setNarrOpen] = useState(false)      // mobile narration bubble
+  const uiTimerRef = useRef(null)
+
+  // bearing (deg) from point a[lng,lat] toward b — for the enemy-POV camera
+  function bearingTo(a, b) {
+    const toRad = d => d * Math.PI / 180
+    const dLng = toRad(b[0] - a[0])
+    const y = Math.sin(dLng) * Math.cos(toRad(b[1]))
+    const x = Math.cos(toRad(a[1])) * Math.sin(toRad(b[1])) -
+              Math.sin(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.cos(dLng)
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360
+  }
+
+  // apply the current camera mode for a given phase (used on mode change + phase change)
+  function applyCamera(mode, ph) {
+    const m = mapRef.current
+    if (!m) return false
+    const data = SIM_PHASES[ph]
+    if (mode.view === 'follow' && mode.unitId && data.units[mode.unitId]) {
+      m.flyTo({ center: data.units[mode.unitId], zoom: 15.2, pitch: 55, bearing: 0, duration: 1600, essential: true })
+      return true
+    }
+    if (mode.view === 'enemy') {
+      // camera sits at the OPFOR position relevant to this phase, ground-level,
+      // looking toward the centroid of the advancing friendly forces
+      const op = OPFOR_POSITIONS.find(o => o.phases.includes(ph)) || OPFOR_POSITIONS[1]
+      const unitPos = Object.values(data.units)
+      const cLng = unitPos.reduce((s, p) => s + p[0], 0) / unitPos.length
+      const cLat = unitPos.reduce((s, p) => s + p[1], 0) / unitPos.length
+      m.flyTo({ center: op.coords, zoom: 15.6, pitch: 62, bearing: bearingTo(op.coords, [cLng, cLat]), duration: 1800, essential: true })
+      return true
+    }
+    if (mode.view === 'target_a' || mode.view === 'target_b') {
+      const op = mode.view === 'target_a' ? OPFOR_POSITIONS[0] : OPFOR_POSITIONS[1]
+      m.flyTo({ center: op.coords, zoom: 15.3, pitch: 45, bearing: 0, duration: 1500, essential: true })
+      return true
+    }
+    return false // overview — caller uses the default phase framing
+  }
 
   const opforElemsRef = useRef({})  // id → DOM element
 
@@ -392,7 +440,14 @@ export default function Simulation() {
     // top-right: the InfoPanel owns the top-left corner and was covering the zoom buttons
     map.addControl(new maplibregl.NavigationControl(), 'top-right')
 
-    map.on('load', () => {
+    // The whole scene (forces, layers) used to wait for map 'load' — which never
+    // fires when the tile server is slow/unreachable (weak cellular). The user
+    // then sees an empty map with no forces. Markers don't need tiles, so if
+    // 'load' hasn't fired within 4.5s we build the scene anyway.
+    let sceneInited = false
+    let layersDone = false
+    // style-dependent part — throws before the style loads; retried on 'load'
+    const initLayers = () => {
       // terrain
       map.addSource('terrain',{type:'raster-dem',
         tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
@@ -443,6 +498,14 @@ export default function Simulation() {
         filter:['==',['get','type'],'endpoint'],
         paint:{'circle-radius':7,'circle-color':['get','color'],'circle-opacity':0.9,
                'circle-stroke-width':2,'circle-stroke-color':'#000'}})
+      layersDone = true
+    }
+
+    // markers + readiness — DOM-based, works even with no tiles at all
+    const initScene = () => {
+      if (sceneInited) return
+      sceneInited = true
+      try { initLayers() } catch (e) { console.warn('[SIM] layers deferred (style not loaded):', e?.message) }
 
       // static markers
       AREA_309.geojson.features.forEach(feat => {
@@ -544,7 +607,13 @@ export default function Simulation() {
       console.log('[SIM] all markers added, markersRef:', Object.keys(markersRef.current))
 
       setMapReady(true)
+    }
+    map.on('load', () => {
+      if (!layersDone) { try { initLayers() } catch (_) {} }
+      initScene()
     })
+    // tile server slow/unreachable (weak cellular)? the forces don't need it
+    const sceneFallback = setTimeout(initScene, 4500)
 
     // SADAN voice commands
     const onMapCmd = e => {
@@ -560,7 +629,7 @@ export default function Simulation() {
     const onSetPhase = e => {
       const p = Number(e.detail?.phase)
       if (isNaN(p) || p < 0 || p > 7) return
-      setPhase(p)
+      gotoPhase(p)   // was setPhase — undefined, silently broke voice phase jumps
     }
     // SADAN focus unit — pan camera to a specific unit in current phase
     const onFocusUnit = e => {
@@ -570,16 +639,31 @@ export default function Simulation() {
       window.dispatchEvent(new CustomEvent('sadan:sim_show_unit', { detail: { unit_id: uid } }))
     }
 
+    // director camera — voice/buttons
+    const onCamera = (e) => {
+      const { view = 'overview', unit_id } = e.detail ?? {}
+      const mode = { view, unitId: unit_id || 'kitaA' }
+      setCameraMode(mode)
+      if (!applyCamera(mode, phaseRefForCamera.current)) {
+        // back to overview — re-run the default framing by nudging phase effect
+        const m = mapRef.current
+        const cam0 = SIM_PHASES[phaseRefForCamera.current].camera
+        if (m) m.flyTo({ center: cam0.center, zoom: cam0.zoom, bearing: 0, pitch: Math.min(cam0.pitch, 30), duration: 1400, essential: true })
+      }
+    }
+    window.addEventListener('sadan:sim_camera', onCamera)
     window.addEventListener('sadan:map_command', onMapCmd)
     window.addEventListener('sadan:toggle3d', onToggle3d)
     window.addEventListener('sadan:sim_set_phase', onSetPhase)
     window.addEventListener('sadan:sim_focus_unit', onFocusUnit)
 
     return () => {
+      window.removeEventListener('sadan:sim_camera', onCamera)
       window.removeEventListener('sadan:map_command', onMapCmd)
       window.removeEventListener('sadan:toggle3d', onToggle3d)
       window.removeEventListener('sadan:sim_set_phase', onSetPhase)
       window.removeEventListener('sadan:sim_focus_unit', onFocusUnit)
+      clearTimeout(sceneFallback)
       cancelAnimationFrame(rafRef.current)
       clearInterval(heliTimer.current)
       clearInterval(cinRef.current)
@@ -587,6 +671,43 @@ export default function Simulation() {
       map.remove(); mapRef.current=null
     }
   }, [])
+
+  // ── voice actions queued from another screen (simDispatch pending) ────────
+  useEffect(() => {
+    if (!mapReady) return
+    const raw = sessionStorage.getItem('sadan_sim_pending')
+    if (!raw) return
+    sessionStorage.removeItem('sadan_sim_pending')
+    let events = []
+    try { events = JSON.parse(raw) } catch (_) { return }
+    // small delay: let the map settle before replaying the user's request
+    const t = setTimeout(() => {
+      events.forEach(ev => window.dispatchEvent(new CustomEvent(ev.name, { detail: ev.detail })))
+    }, 900)
+    return () => clearTimeout(t)
+  }, [mapReady])
+
+  // ── phase toast: big center label for 2.4s on every phase change ──────────
+  useEffect(() => {
+    phaseRefForCamera.current = phase
+    setPhaseToast(SIM_PHASES[phase].longLabel)
+    setNarrOpen(false)
+    const t = setTimeout(() => setPhaseToast(null), 2400)
+    return () => clearTimeout(t)
+  }, [phase])
+
+  // ── mobile cinema mode: chrome fades after 5s idle, any touch revives ─────
+  useEffect(() => {
+    if (!isMobile) return
+    const wake = () => {
+      setUiVisible(true)
+      clearTimeout(uiTimerRef.current)
+      uiTimerRef.current = setTimeout(() => setUiVisible(false), 5000)
+    }
+    wake()
+    document.addEventListener('pointerdown', wake)
+    return () => { document.removeEventListener('pointerdown', wake); clearTimeout(uiTimerRef.current) }
+  }, [isMobile])
 
   // ── phase change: move units + update all map layers ──────────────────────
   useEffect(() => {
@@ -701,14 +822,17 @@ export default function Simulation() {
     const targetZoom = Math.log2((170 * 360) / (256 * maxDev))
     const zoom = Math.min(13.0, Math.max(11.0, targetZoom))
 
-    map.flyTo({
-      center:   [cLng, cLat],
-      zoom,
-      bearing:  0,                         // always north-up → no rotation confusion
-      pitch:    Math.min(cam.pitch, 30),   // ≤30° keeps southern units visible
-      duration: 1800,
-      essential: true,
-    })
+    // director mode (follow / enemy POV) overrides the default overview framing
+    if (!applyCamera(cameraModeRef.current, phase)) {
+      map.flyTo({
+        center:   [cLng, cLat],
+        zoom,
+        bearing:  0,                         // always north-up → no rotation confusion
+        pitch:    Math.min(cam.pitch, 30),   // ≤30° keeps southern units visible
+        duration: 1800,
+        essential: true,
+      })
+    }
 
     // 3. Fire lines
     const fireLines = FIRE_LINES_DATA[phase] ?? []
@@ -994,9 +1118,11 @@ export default function Simulation() {
 
   return (
     <div className="flex flex-col h-dvh bg-demo-bg" dir="rtl">
-      {/* top bar — pr-14 clears the voice orb; PhaseBar is desktop-only (mobile
-          has the bottom progress + HUD) */}
-      <div className="flex-shrink-0 flex items-center gap-2 md:gap-3 pl-4 pr-14 py-2.5 bg-demo-surface border-b border-demo-border z-10">
+      {/* top bar — pr-14 clears the voice orb; PhaseBar is desktop-only.
+          Mobile cinema mode: the bar floats over the map and slides away on idle. */}
+      <div className={`flex-shrink-0 flex items-center gap-2 md:gap-3 pl-4 pr-14 py-2.5 bg-demo-surface border-b border-demo-border z-20
+        absolute top-0 left-0 right-0 md:static transition-transform duration-300
+        ${(!isMobile || uiVisible) ? 'translate-y-0' : '-translate-y-full'}`}>
         <button onClick={()=>navigate('/exercise')} className="flex items-center gap-1.5 text-gray-400 hover:text-white text-sm transition-colors flex-shrink-0">
           <ChevronLeft size={16}/> <span className="hidden sm:inline">חזרה לתיק</span>
         </button>
@@ -1038,6 +1164,69 @@ export default function Simulation() {
       <div className="flex-1 relative min-h-0" dir="ltr">
         <div ref={mapElRef} className="w-full h-full" style={{direction:'ltr'}}/>
 
+        {/* phase toast — big center label on every phase change */}
+        {phaseToast && (
+          <div className="absolute inset-x-0 top-[28%] z-40 flex justify-center pointer-events-none" dir="rtl">
+            <div className="px-6 py-3 rounded-2xl bg-black/70 border border-demo-gold/50 backdrop-blur-sm text-center"
+              style={{ animation: 'simToast 2.4s ease forwards' }}>
+              <div className="text-demo-gold font-black text-2xl md:text-4xl">{phaseToast}</div>
+            </div>
+          </div>
+        )}
+        <style>{`@keyframes simToast { 0%{opacity:0;transform:scale(0.92)} 12%{opacity:1;transform:scale(1)} 80%{opacity:1} 100%{opacity:0} }`}</style>
+
+        {/* director camera — vertical stack, right edge */}
+        <div className={`absolute top-1/2 -translate-y-1/2 right-2 z-30 flex flex-col gap-2 transition-opacity duration-300
+          ${(!isMobile || uiVisible) ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} dir="rtl">
+          {[
+            { view: 'overview', icon: '🛰', title: 'מבט על' },
+            { view: 'follow',   icon: '🎥', title: 'עקוב אחרי כיתה א׳' },
+            { view: 'enemy',    icon: '👁', title: 'נקודת מבט האויב' },
+          ].map(b => (
+            <button key={b.view} title={b.title}
+              onClick={() => window.dispatchEvent(new CustomEvent('sadan:sim_camera', { detail: { view: b.view, unit_id: 'kitaA' } }))}
+              className={`w-10 h-10 rounded-full text-lg flex items-center justify-center border backdrop-blur-sm transition-all
+                ${cameraMode.view === b.view
+                  ? 'bg-demo-gold text-black border-demo-gold'
+                  : 'bg-demo-surface/80 text-gray-300 border-demo-border hover:border-demo-gold/50'}`}>
+              {b.icon}
+            </button>
+          ))}
+        </div>
+
+        {/* mobile: narration chip + floating control pill (desktop keeps its bars) */}
+        {isMobile && (
+          <>
+            {narrOpen && (
+              <div className="absolute bottom-24 inset-x-3 z-30 bg-black/80 border border-demo-border rounded-2xl p-3 backdrop-blur-sm" dir="rtl"
+                onClick={() => setNarrOpen(false)}>
+                <p className="text-gray-100 text-sm leading-relaxed">{currentData.narration}</p>
+              </div>
+            )}
+            <div className={`absolute bottom-4 inset-x-0 z-30 flex flex-col items-center gap-2 transition-opacity duration-300
+              ${uiVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} dir="rtl">
+              <button onClick={() => setNarrOpen(v => !v)}
+                className="max-w-[85%] truncate px-3 py-1 rounded-full bg-black/70 border border-demo-gold/40 text-demo-gold text-xs font-bold backdrop-blur-sm">
+                ס · {currentData.longLabel} — הקש לקריינות
+              </button>
+              <div className="flex items-center gap-2 bg-black/70 border border-demo-border rounded-full px-2 py-1.5 backdrop-blur-sm">
+                <button onClick={prevPhase} disabled={phase===0}
+                  className="w-9 h-9 rounded-full text-gray-300 disabled:opacity-30 flex items-center justify-center">
+                  <ChevronRight size={18}/>
+                </button>
+                <button onClick={togglePlay} disabled={phase>=total-1&&!playing}
+                  className={`w-11 h-11 rounded-full flex items-center justify-center font-bold ${playing ? 'bg-demo-warning/30 text-demo-warning' : 'bg-demo-gold text-black'}`}>
+                  {playing ? <Pause size={18}/> : <Play size={18}/>}
+                </button>
+                <button onClick={nextPhase} disabled={phase>=total-1}
+                  className="w-9 h-9 rounded-full text-gray-300 disabled:opacity-30 flex items-center justify-center">
+                  <ChevronLeft size={18}/>
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
         {/* מידע — שלב + מצב כוח מאוחדים, פינה אחת בלבד (שמאל-עליון) */}
         <InfoPanel phase={phase} visible={hudVisible} onToggle={()=>setHudVisible(v=>!v)}/>
 
@@ -1064,14 +1253,14 @@ export default function Simulation() {
         )}
       </div>
 
-      {/* narration */}
-      <div className="flex-shrink-0 bg-demo-surface/95 border-t border-demo-border px-5 py-2.5 min-h-[52px] flex items-center gap-3">
+      {/* narration — desktop only; mobile uses the tap-to-open bubble */}
+      <div className="flex-shrink-0 bg-demo-surface/95 border-t border-demo-border px-5 py-2.5 min-h-[52px] hidden md:flex items-center gap-3">
         <div className="w-7 h-7 rounded-full bg-demo-gold flex items-center justify-center text-black font-black text-xs flex-shrink-0">ס</div>
         <p className="text-gray-200 text-sm leading-relaxed flex-1" dir="rtl">{currentData.narration}</p>
       </div>
 
-      {/* controls — wraps on mobile so nothing gets cut at the edge */}
-      <div className="flex-shrink-0 bg-demo-surface border-t border-demo-border px-3 md:px-5 py-3 flex items-center gap-2 md:gap-3 flex-wrap md:flex-nowrap">
+      {/* controls — desktop only; mobile uses the floating pill over the map */}
+      <div className="flex-shrink-0 bg-demo-surface border-t border-demo-border px-3 md:px-5 py-3 hidden md:flex items-center gap-2 md:gap-3">
         <button onClick={handleReset} className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-demo-card transition-colors" title="התחל מחדש">
           <RotateCcw size={16}/>
         </button>

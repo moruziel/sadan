@@ -145,7 +145,11 @@ SCREEN_GUIDE: dict = {
         "מסך סימולציה טקטית — הרצת התרגיל על המפה בשלבים: "
         "כינוס, תנועה, ביסוס, כיסוי, הסתערות יעד א', מעבר, כיבוש יעד ב', נסיגה. "
         "כוחות: נמר-7 (מ\"מ), נמר-71 (כיתה א' מסתערת), נמר-72 (כיתה ב' מחפה), נמר-73 (כיתה ג'). "
-        "כלים: sim_goto_phase, sim_pause, sim_resume, sim_show_unit, toggle_3d."
+        "כלים: sim_goto_phase, sim_pause, sim_resume, sim_show_unit, sim_camera, toggle_3d. "
+        "זוויות צפייה (sim_camera): overview=מבט על | follow+unit_id=עקוב אחרי כוח | "
+        "enemy=נקודת מבט האויב | target_a/target_b=תצפית על יעד. "
+        "חשוב: כלי הסימולציה עובדים גם כשהמשתמש במסך אחר — המערכת תנווט לסימולציה אוטומטית. "
+        "כשמבקשים 'התחל סימולציה' — הפעל sim_goto_phase(0) ואז sim_resume."
     ),
 }
 
@@ -554,6 +558,30 @@ class GeminiLivePipeline:
             ]
         )
 
+        # sim_camera — cinematic viewpoints in the simulation
+        sim_camera_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="sim_camera",
+                    description=(
+                        "שנה את זווית הצפייה בסימולציה. "
+                        "views: overview=מבט על כללי | follow=עקוב אחרי כוח (חובה unit_id) | "
+                        "enemy=נקודת מבט האויב — המצלמה בעמדת הבימוי מביטה אל הכוחות | "
+                        "target_a / target_b = תצפית על יעד. "
+                        "הפעל כשמבקשים 'עקוב אחרי כיתה א', 'תראה לי מנקודת המבט של האויב', 'מבט על', 'תצפית על יעד ב'."
+                    ),
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "view": types.Schema(type=types.Type.STRING, description="overview / follow / enemy / target_a / target_b"),
+                            "unit_id": types.Schema(type=types.Type.STRING, description="ל-follow בלבד: kitaA / kitaB / kitaG / mm"),
+                        },
+                        required=["view"],
+                    ),
+                )
+            ]
+        )
+
         # sim_show_unit — fly map to a specific unit's current position
         sim_show_unit_tool = types.Tool(
             function_declarations=[
@@ -656,7 +684,7 @@ class GeminiLivePipeline:
                 send_wa_tool, toggle_3d_tool, toggle_legend_tool, toggle_layers_panel_tool,
                 map_fly_to_tool, map_zoom_tool, map_rotate_tool, map_show_layer_tool,
                 app_navigate_tool, map_show_element_tool, fill_field_tool,
-                sim_pause_tool, sim_resume_tool, sim_goto_phase_tool, sim_show_unit_tool,
+                sim_pause_tool, sim_resume_tool, sim_goto_phase_tool, sim_show_unit_tool, sim_camera_tool,
             ],
         )
 
@@ -728,7 +756,7 @@ class GeminiLivePipeline:
                 send_wa_tool, toggle_3d_tool, toggle_legend_tool, toggle_layers_panel_tool,
                 map_fly_to_tool, map_zoom_tool, map_rotate_tool, map_show_layer_tool,
                 app_navigate_tool, map_show_element_tool, fill_field_tool,
-                sim_pause_tool, sim_resume_tool, sim_goto_phase_tool, sim_show_unit_tool,
+                sim_pause_tool, sim_resume_tool, sim_goto_phase_tool, sim_show_unit_tool, sim_camera_tool,
             ],
         )
 
@@ -1185,6 +1213,18 @@ class GeminiLivePipeline:
                                 logger.info(f"[Gemini Live] sim_show_unit: unit={unit_id}")
                                 await session.send_tool_response(function_responses=[
                                     types.FunctionResponse(name="sim_show_unit", id=fc.id, response={"result": "ok", "unit": unit_id})
+                                ])
+
+                            elif fc.name == "sim_camera":
+                                cam_args = fc.args or {}
+                                await self.websocket.send_text(json.dumps({
+                                    "type": "sim_camera",
+                                    "view": str(cam_args.get("view", "overview")),
+                                    "unit_id": str(cam_args.get("unit_id", "")),
+                                }, ensure_ascii=False))
+                                logger.info(f"[Gemini Live] sim_camera: {cam_args}")
+                                await session.send_tool_response(function_responses=[
+                                    types.FunctionResponse(name="sim_camera", id=fc.id, response={"result": "ok"})
                                 ])
 
                     if not response.server_content:

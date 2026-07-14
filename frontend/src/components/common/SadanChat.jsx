@@ -11,7 +11,18 @@ const WS_URL   = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + loca
 const NUM_BARS = 12
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+// Simulation events only work when the simulation screen is mounted. If the
+// user asks for the simulation from another screen, queue the action, navigate,
+// and let Simulation.jsx replay it after the map is ready. (Bug: SADAN "started"
+// the simulation but the user saw nothing.)
 function simDispatch(event, detail = {}) {
+  if (event.startsWith('sadan:sim_') && window.location.pathname !== '/simulation') {
+    const pending = JSON.parse(sessionStorage.getItem('sadan_sim_pending') || '[]')
+    pending.push({ name: event, detail })
+    sessionStorage.setItem('sadan_sim_pending', JSON.stringify(pending))
+    window.dispatchEvent(new CustomEvent('sadan:navigate', { detail: { path: '/simulation' } }))
+    return
+  }
   window.dispatchEvent(new CustomEvent(event, { detail }))
 }
 
@@ -216,10 +227,10 @@ const SADAN_COMMANDS = [
 
   // ── כלל הסימולציה / הנחה ───────────────────────────────────────────────────
   {
-    re: /נהל.?סימולציה|שלוט.?בסימולציה|הנחה.?אותי|תנרטב|תסביר.?סימולציה|הסבר.?תרגיל/i,
+    re: /נהל.?סימולציה|שלוט.?בסימולציה|התחל.?סימולציה|הפעל.?סימולציה|הרץ.?(את.?ה)?סימולציה|הנחה.?אותי|תסביר.?סימולציה|הסבר.?תרגיל/i,
     handler: () => {
-      simDispatch('sadan:toggle3d')
       simDispatch('sadan:sim_set_phase', { phase: 0 })
+      simDispatch('sadan:sim_resume')
       return {
         handled: true,
         reply: `🎬 מתחילה ניהול סימולציה — תרגיל מחלקה ב׳, שטח 309ה.\n\nהפעלתי תצוגת תלת-מימד ועברתי לשלב א׳ — כינוס.\n\n📋 מבנה הכוח:\n• נמר-7: מ"מ (מפקד)\n• נמר-71: כיתה א׳ — הסתערות ראשית\n• נמר-72: כיתה ב׳ — ירי ברתק (כיסוי)\n• נמר-73: כיתה ג׳ — הסתערות + כיסוי\n\n💬 תוכל לשאול אותי:\n• "תתמקד על הכוח המחפה"\n• "מרחק ההסתערות"\n• "הסבר מחסנית בטיחות"\n• "עבור לשלב הסתערות"\n• "הצג 3D"\n\nאני שולטת בסימולציה בזמן אמת. 👇`,
@@ -1159,17 +1170,15 @@ export default function SadanChat({ autoOpen = false, visible = true, currentScr
                 detail: { field_id: msg.field_id, value: msg.value, section: msg.section }
               }))
             } else if (msg.type === 'sim_pause') {
-              window.dispatchEvent(new CustomEvent('sadan:sim_pause'))
+              simDispatch('sadan:sim_pause')
             } else if (msg.type === 'sim_resume') {
-              window.dispatchEvent(new CustomEvent('sadan:sim_resume'))
+              simDispatch('sadan:sim_resume')
             } else if (msg.type === 'sim_goto_phase') {
-              window.dispatchEvent(new CustomEvent('sadan:sim_goto_phase', {
-                detail: { phase: msg.phase }
-              }))
+              simDispatch('sadan:sim_goto_phase', { phase: msg.phase })
             } else if (msg.type === 'sim_show_unit') {
-              window.dispatchEvent(new CustomEvent('sadan:sim_show_unit', {
-                detail: { unit_id: msg.unit_id }
-              }))
+              simDispatch('sadan:sim_show_unit', { unit_id: msg.unit_id })
+            } else if (msg.type === 'sim_camera') {
+              simDispatch('sadan:sim_camera', { view: msg.view, unit_id: msg.unit_id })
             }
           } catch (_) {}
         }
